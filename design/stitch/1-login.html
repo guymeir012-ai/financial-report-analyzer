@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="he"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TERMINAL.IL // כניסה למערכת אנליזה מוסדית</title>
+<!-- Fonts: Rubik for Hebrew & JetBrains Mono for Numbers/Tickers -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Rubik:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with forms & container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#181c21",
+            "on-surface-variant": "#bdc8d1",
+            "primary": "#8ed5ff",
+            "on-secondary-fixed": "#002109",
+            "secondary-fixed": "#6bff8f",
+            "primary-fixed": "#c4e7ff",
+            "surface-tint": "#7bd0ff",
+            "secondary-fixed-dim": "#4ae176",
+            "error-container": "#93000a",
+            "on-secondary-fixed-variant": "#005321",
+            "inverse-surface": "#e0e2ea",
+            "secondary-container": "#00b954",
+            "outline": "#87929a",
+            "on-primary": "#00354a",
+            "on-primary-fixed": "#001e2c",
+            "error": "#ffb4ab",
+            "on-primary-fixed-variant": "#004c69",
+            "on-error-container": "#ffdad6",
+            "inverse-primary": "#00668a",
+            "primary-container": "#38bdf8",
+            "on-tertiary": "#68000a",
+            "on-surface": "#e0e2ea",
+            "surface-container-highest": "#31353b",
+            "surface-dim": "#101419",
+            "surface-bright": "#36393f",
+            "primary-fixed-dim": "#7bd0ff",
+            "surface": "#101419",
+            "surface-variant": "#31353b",
+            "tertiary-fixed": "#ffdad7",
+            "surface-container-high": "#262a30",
+            "on-tertiary-fixed-variant": "#930013",
+            "on-primary-container": "#004965",
+            "on-background": "#e0e2ea",
+            "on-tertiary-container": "#8d0012",
+            "on-secondary": "#003915",
+            "surface-container-lowest": "#0a0e13",
+            "on-tertiary-fixed": "#410004",
+            "inverse-on-surface": "#2d3136",
+            "outline-variant": "#3e484f",
+            "tertiary": "#ffbcb7",
+            "on-secondary-container": "#004119",
+            "tertiary-container": "#ff938c",
+            "secondary": "#4ae176",
+            "surface-container": "#1c2025",
+            "background": "#101419",
+            "tertiary-fixed-dim": "#ffb3ad",
+            "on-error": "#690005"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xs": "0.25rem",
+            "space-md": "0.75rem",
+            "margin": "0.75rem",
+            "gutter-desktop": "0.75rem",
+            "space-xl": "1.5rem",
+            "space-sm": "0.375rem",
+            "gutter": "0.5rem",
+            "margin-desktop": "1rem",
+            "space-lg": "1rem"
+          },
+          "fontFamily": {
+            "label-header": ["JetBrains Mono"],
+            "headline-md": ["Rubik"],
+            "display-lg-mobile": ["Rubik"],
+            "display-lg": ["Rubik"],
+            "body-compact": ["Rubik"],
+            "title-sm": ["Rubik"],
+            "data-ticker": ["JetBrains Mono"],
+            "data-table-cell": ["JetBrains Mono"],
+            "data-metric-lg": ["JetBrains Mono"],
+            "body-default": ["Rubik"]
+          },
+          "fontSize": {
+            "label-header": ["10px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "500" }],
+            "display-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+            "display-lg": ["30px", { "lineHeight": "38px", "fontWeight": "600" }],
+            "body-compact": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "title-sm": ["15px", { "lineHeight": "22px", "fontWeight": "500" }],
+            "data-ticker": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "data-table-cell": ["12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "data-metric-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "body-default": ["13px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Subtle grid line styling for terminal aesthetic */
+    .terminal-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(62, 72, 79, 0.12) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(62, 72, 79, 0.12) 1px, transparent 1px);
+    }
+    
+    /* Monospace smooth numbers */
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Subtle custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0e13;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3e484f;
+    }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface antialiased min-h-screen flex flex-col justify-between overflow-x-hidden select-none">
+<!-- Ambient Market Grid & Streaming Ticker Hairlines -->
+<div class="fixed inset-0 terminal-grid pointer-events-none opacity-40 z-0"></div>
+<!-- Subtle Radial Glow behind the Auth Module -->
+<div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-primary/5 rounded-full blur-[140px] pointer-events-none z-0"></div>
+<!-- Top Global Ticker Stream Bar (Institutional Ambient Feed) -->
+<header class="relative z-10 w-full bg-surface-container-lowest/90 backdrop-blur-sm border-b border-outline-variant/40 px-space-md py-1.5 flex items-center justify-between">
+<!-- Live Node Status Indicator -->
+<div class="flex items-center gap-space-md text-on-surface-variant font-label-header text-label-header">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary shadow-[0_0_6px_rgba(74,225,118,0.7)] animate-pulse"></span>
+<span class="text-primary font-bold">SEC-EDGAR NODE [01]</span>
+</div>
+<span class="text-outline-variant hidden sm:inline">|</span>
+<span class="hidden sm:inline text-on-surface-variant/80">LATENCY: <span class="text-secondary font-data-ticker">12ms</span></span>
+<span class="text-outline-variant hidden md:inline">|</span>
+<span class="hidden md:inline text-on-surface-variant/80">FEED: NASDAQ / NYSE LIVE FEED</span>
+</div>
+<!-- Scrolling Stock Tickers (Bilingual Monospace Stream) -->
+<div class="flex items-center gap-space-lg overflow-hidden whitespace-nowrap text-on-surface-variant font-data-ticker text-data-ticker" dir="ltr">
+<div class="flex items-center gap-1.5">
+<span class="text-primary-fixed-dim">NVDA</span>
+<span class="text-on-surface font-semibold">$124.80</span>
+<span class="text-secondary flex items-center">▲ +3.14%</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="text-primary-fixed-dim">AAPL</span>
+<span class="text-on-surface font-semibold">$224.23</span>
+<span class="text-secondary flex items-center">▲ +0.68%</span>
+</div>
+<div class="flex items-center gap-1.5 hidden md:flex">
+<span class="text-primary-fixed-dim">MSFT</span>
+<span class="text-on-surface font-semibold">$448.90</span>
+<span class="text-error flex items-center">▼ -0.42%</span>
+</div>
+<div class="flex items-center gap-1.5 hidden lg:flex">
+<span class="text-primary-fixed-dim">AMZN</span>
+<span class="text-on-surface font-semibold">$186.10</span>
+<span class="text-secondary flex items-center">▲ +1.15%</span>
+</div>
+<div class="flex items-center gap-1.5 hidden xl:flex">
+<span class="text-primary-fixed-dim">TSLA</span>
+<span class="text-on-surface font-semibold">$252.19</span>
+<span class="text-error flex items-center">▼ -2.08%</span>
+</div>
+</div>
+<!-- Encryption Badge -->
+<div class="flex items-center gap-1 text-on-surface-variant font-label-header text-label-header" dir="ltr">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="lock">lock</span>
+<span class="text-primary tracking-wider">TLS 1.3 / 256-BIT</span>
+</div>
+</header>
+<!-- Central Authentication Workspace Area -->
+<main class="relative z-10 flex-1 flex items-center justify-center p-space-md sm:p-space-lg my-auto">
+<div class="w-full max-w-[440px] bg-surface-container-low/95 border border-outline-variant/60 rounded p-space-lg sm:p-space-xl relative shadow-[0_24px_50px_-12px_rgba(0,0,0,0.85)]">
+<!-- Top Accent Bar (1px Cyan Electric Line) -->
+<div class="absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-primary-container to-transparent"></div>
+<!-- Terminal Status Pill & Meta -->
+<div class="flex items-center justify-between mb-space-lg">
+<div class="inline-flex items-center gap-1.5 px-space-sm py-0.5 rounded bg-surface-container-highest/60 border border-outline-variant text-primary font-label-header text-label-header" dir="ltr">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+<span>TERMINAL.IL // SEC-EDGAR v4.8</span>
+</div>
+<div class="text-on-surface-variant/70 font-label-header text-label-header" dir="ltr">
+          REGION: IL-TLV01
+        </div>
+</div>
+<!-- App Title & Value Proposition -->
+<div class="mb-space-xl text-right">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-headline-md" data-icon="terminal">terminal</span>
+<h1 class="text-display-lg-mobile font-headline-md font-bold text-on-surface tracking-tight">
+            מנתח דוחות כספיים
+          </h1>
+</div>
+<p class="text-on-surface-variant font-body-default text-body-default leading-relaxed">
+          דוחות 10-Q ו-10-K של חברות אמריקאיות, בעברית, עם מקור לכל מספר ומודלים פיננסיים בזמן אמת.
+        </p>
+</div>
+<!-- Login Form Module -->
+<form class="space-y-space-lg" onsubmit="event.preventDefault();">
+<!-- Field 1: Email Address -->
+<div class="space-y-1">
+<div class="flex items-center justify-between text-on-surface-variant">
+<label class="font-body-compact text-body-compact text-on-surface flex items-center gap-1" for="email">
+<span>כתובת אימייל</span>
+<span class="text-primary text-xs">*</span>
+</label>
+<span class="font-label-header text-label-header text-outline tracking-wider" dir="ltr">INSTITUTIONAL ID</span>
+</div>
+<div class="relative group">
+<div class="absolute inset-y-0 right-0 pr-space-md flex items-center pointer-events-none text-outline-variant group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined text-base" data-icon="alternate_email">alternate_email</span>
+</div>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded py-2 pr-9 pl-3 text-on-surface font-label-header text-body-compact placeholder-outline-variant/70 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all" dir="ltr" id="email" name="email" placeholder="analyst@fund.co.il" required="" type="email"/>
+</div>
+</div>
+<!-- Field 2: Password -->
+<div class="space-y-1">
+<div class="flex items-center justify-between">
+<label class="font-body-compact text-body-compact text-on-surface flex items-center gap-1" for="password">
+<span>סיסמת גישה למסוף</span>
+<span class="text-primary text-xs">*</span>
+</label>
+<a class="font-body-compact text-body-compact text-primary hover:text-primary-fixed underline-offset-2 hover:underline transition-colors" href="#">
+              שכחת סיסמה?
+            </a>
+</div>
+<div class="relative group">
+<div class="absolute inset-y-0 right-0 pr-space-md flex items-center pointer-events-none text-outline-variant group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined text-base" data-icon="key">key</span>
+</div>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded py-2 pr-9 pl-10 text-on-surface font-label-header text-body-compact placeholder-outline-variant/70 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all" dir="ltr" id="password" name="password" placeholder="••••••••••••" required="" type="password"/>
+<button class="absolute inset-y-0 left-0 pl-space-md flex items-center text-outline hover:text-on-surface focus:outline-none transition-colors" onclick="const p = document.getElementById('password'); const icon = document.getElementById('pwd-toggle-icon'); if (p.type === 'password') { p.type = 'text'; icon.innerText = 'visibility_off'; } else { p.type = 'password'; icon.innerText = 'visibility'; }" title="הצג/הסתר סיסמה" type="button">
+<span class="material-symbols-outlined text-base" data-icon="visibility" id="pwd-toggle-icon">visibility</span>
+</button>
+</div>
+</div>
+<!-- Checkbox: Remember Terminal Session -->
+<div class="flex items-center justify-between pt-0.5">
+<label class="flex items-center gap-2 cursor-pointer group">
+<input checked="" class="w-3.5 h-3.5 rounded bg-surface-container-lowest border-outline-variant text-primary-container focus:ring-0 focus:ring-offset-0 transition-colors" id="remember" type="checkbox"/>
+<span class="text-on-surface-variant group-hover:text-on-surface font-body-compact text-body-compact transition-colors">
+              זכור מסוף זה ל-30 יום
+            </span>
+</label>
+<span class="text-outline font-label-header text-label-header" dir="ltr">FIPS-140-2</span>
+</div>
+<!-- Primary Action Button: Enter Terminal -->
+<button class="w-full py-2.5 px-space-md bg-primary-container text-surface-container-lowest font-headline-md font-semibold text-title-sm rounded hover:bg-primary-fixed focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-container-low transition-all duration-150 flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(56,189,248,0.22)] active:scale-[0.99]" type="submit">
+<span>כניסה למערכת</span>
+<span class="material-symbols-outlined text-base" data-icon="arrow_back">arrow_back</span>
+</button>
+<!-- Divider with Terminal "OR" -->
+<div class="relative flex items-center justify-center py-space-xs">
+<div class="absolute inset-0 flex items-center">
+<div class="w-full border-t border-outline-variant/60"></div>
+</div>
+<span class="relative px-space-md bg-surface-container-low font-label-header text-label-header text-outline uppercase tracking-wider">
+            או התחברות ארגונית
+          </span>
+</div>
+<!-- Institutional SSO Action -->
+<button class="w-full py-2 px-space-md bg-surface-container-lowest border border-outline-variant rounded text-on-surface hover:text-primary hover:border-primary-container/60 hover:bg-surface-container transition-all duration-150 flex items-center justify-center gap-2 font-body-compact text-body-compact" type="button">
+<span class="material-symbols-outlined text-base text-primary" data-icon="shield">shield</span>
+<span>כניסה באמצעות SSO מוסדי / ארגוני (Okta / Azure AD)</span>
+</button>
+</form>
+<!-- Security / Analyst Audit Notice -->
+<div class="mt-space-lg pt-space-md border-t border-outline-variant/50 flex items-start gap-2 text-on-surface-variant/80 font-body-compact text-[11px] leading-tight">
+<span class="material-symbols-outlined text-sm text-outline flex-shrink-0 mt-0.5" data-icon="verified_user">verified_user</span>
+<span>
+          גישה זו מיועדת לאנליסטים מורשים בלבד. כל הפעולות, השאילתות והורדות הנתונים מנוטרות ומאומתות לפי תקני עמידה ברגולציה.
+        </span>
+</div>
+</div>
+</main>
+<!-- Institutional Terminal Footer Bar -->
+<footer class="relative z-10 w-full bg-surface-container-lowest/90 backdrop-blur-sm border-t border-outline-variant/40 px-space-md py-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-on-surface-variant font-label-header text-label-header">
+<!-- System Status & Sync Metrics -->
+<div class="flex items-center gap-2 sm:gap-space-md flex-wrap justify-center sm:justify-start">
+<div class="flex items-center gap-1.5 text-on-surface">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-body-compact text-xs">שרתי SEC EDGAR מחוברים בזמן אמת</span>
+</div>
+<span class="text-outline-variant hidden sm:inline">●</span>
+<span class="text-on-surface-variant font-data-ticker" dir="ltr">השהיה: 12ms</span>
+<span class="text-outline-variant hidden sm:inline">●</span>
+<span>גרסה 2025.1-PROD</span>
+</div>
+<!-- Institutional Brand & Copyright -->
+<div class="flex items-center gap-space-md" dir="ltr">
+<span class="text-outline font-data-ticker">FINANCIAL DATA LABS LTD</span>
+<span class="text-outline-variant hidden sm:inline">|</span>
+<a class="hover:text-primary transition-colors" href="#">SECURITY DISCLOSURE</a>
+<span class="text-outline-variant hidden sm:inline">|</span>
+<a class="hover:text-primary transition-colors" href="#">TERMS OF DESK</a>
+</div>
+</footer>
+</body></html>

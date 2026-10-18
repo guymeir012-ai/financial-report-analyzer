@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="he"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TERMINAL.IL // US EQUITIES - עיבוד בקשת אנליזה</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;family=Rubik:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-dim": "#101419",
+            "surface-container-high": "#262a30",
+            "on-secondary-fixed-variant": "#005321",
+            "outline-variant": "#3e484f",
+            "tertiary-fixed": "#ffdad7",
+            "on-error": "#690005",
+            "surface-container-lowest": "#0a0e13",
+            "inverse-on-surface": "#2d3136",
+            "secondary": "#4ae176",
+            "secondary-fixed-dim": "#4ae176",
+            "surface-container-highest": "#31353b",
+            "on-tertiary": "#68000a",
+            "tertiary-fixed-dim": "#ffb3ad",
+            "tertiary": "#ffbcb7",
+            "primary-container": "#38bdf8",
+            "tertiary-container": "#ff938c",
+            "on-secondary": "#003915",
+            "on-primary-container": "#004965",
+            "on-primary": "#00354a",
+            "on-primary-fixed": "#001e2c",
+            "surface-container-low": "#181c21",
+            "outline": "#87929a",
+            "on-tertiary-fixed-variant": "#930013",
+            "surface-bright": "#36393f",
+            "background": "#101419",
+            "on-secondary-fixed": "#002109",
+            "on-tertiary-container": "#8d0012",
+            "on-secondary-container": "#004119",
+            "on-primary-fixed-variant": "#004c69",
+            "inverse-surface": "#e0e2ea",
+            "inverse-primary": "#00668a",
+            "on-surface": "#e0e2ea",
+            "on-tertiary-fixed": "#410004",
+            "surface": "#101419",
+            "secondary-fixed": "#6bff8f",
+            "secondary-container": "#00b954",
+            "on-surface-variant": "#bdc8d1",
+            "primary-fixed-dim": "#7bd0ff",
+            "surface-variant": "#31353b",
+            "error-container": "#93000a",
+            "error": "#ffb4ab",
+            "surface-tint": "#7bd0ff",
+            "primary-fixed": "#c4e7ff",
+            "surface-container": "#1c2025",
+            "primary": "#8ed5ff",
+            "on-background": "#e0e2ea",
+            "on-error-container": "#ffdad6"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter": "0.5rem",
+            "space-xl": "1.5rem",
+            "gutter-desktop": "0.75rem",
+            "space-md": "0.75rem",
+            "space-lg": "1rem",
+            "margin": "0.75rem",
+            "space-xs": "0.25rem",
+            "space-sm": "0.375rem",
+            "margin-desktop": "1rem"
+          },
+          "fontFamily": {
+            "body-default": ["Rubik"],
+            "display-lg-mobile": ["Rubik"],
+            "display-lg": ["Rubik"],
+            "data-table-cell": ["JetBrains Mono"],
+            "body-compact": ["Rubik"],
+            "headline-md": ["Rubik"],
+            "label-header": ["JetBrains Mono"],
+            "data-ticker": ["JetBrains Mono"],
+            "title-sm": ["Rubik"],
+            "data-metric-lg": ["JetBrains Mono"]
+          },
+          "fontSize": {
+            "body-default": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "display-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+            "display-lg": ["30px", { "lineHeight": "38px", "fontWeight": "600" }],
+            "data-table-cell": ["12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "body-compact": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "500" }],
+            "label-header": ["10px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }],
+            "data-ticker": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "title-sm": ["15px", { "lineHeight": "22px", "fontWeight": "500" }],
+            "data-metric-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 16px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    @keyframes subtlePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.96); }
+    }
+    .animate-pulse-slow {
+      animation: subtlePulse 2.2s infinite ease-in-out;
+    }
+
+    @keyframes rotateRadar {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-radar {
+      animation: rotateRadar 1.8s linear infinite;
+    }
+  </style>
+</head>
+<body class="bg-surface-dim text-on-surface antialiased font-body-default min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+<!-- ========================================================================= -->
+<!-- 1. TopNavBar (Shared Component from JSON)                                -->
+<!-- ========================================================================= -->
+<header class="w-full h-11 px-margin-desktop flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest select-none shrink-0 sticky top-0 z-50">
+<!-- Right side: Logo & Navigation Links (RTL context) -->
+<div class="flex items-center gap-space-lg">
+<div class="flex items-center gap-space-sm pl-space-md border-l border-outline-variant">
+<span class="material-symbols-outlined text-primary text-[18px]">terminal</span>
+<span class="font-data-ticker text-data-ticker text-primary tracking-widest uppercase">TERMINAL.IL // US EQUITIES</span>
+</div>
+<!-- Navigation Links from JSON (Active matched to: דוחות 10-Q/K) -->
+<nav class="hidden lg:flex items-center gap-space-md h-11">
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 px-space-xs py-1" href="#">סקירת שוק</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 px-space-xs py-1" href="#">מניות ארה״ב</a>
+<a class="border-b-2 border-primary-container text-primary font-title-sm text-title-sm transition-colors duration-150 px-space-xs py-2 flex items-center gap-1 font-medium" href="#">
+<span>דוחות 10-Q/K</span>
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 px-space-xs py-1" href="#">השוואת מכפילים</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 px-space-xs py-1" href="#">מעקב תיק</a>
+</nav>
+</div>
+<!-- Center/Search Bar (as required: search_bar: "on_left" relative to layout or standard ticker search) -->
+<div class="hidden md:flex items-center gap-space-sm px-space-sm py-1 bg-surface-container-low border border-outline-variant rounded text-on-surface-variant font-data-ticker text-data-ticker w-72">
+<span class="material-symbols-outlined text-[15px] text-outline">search</span>
+<span class="text-on-surface-variant">חפש טיקר / חברה...</span>
+<span class="mr-auto font-label-header text-label-header bg-surface-container-highest px-1 text-on-surface-variant rounded">⌘K</span>
+</div>
+<!-- Left side (RTL left): Live Connection Node & Actions -->
+<div class="flex items-center gap-space-md">
+<!-- Live Node & Latency Status -->
+<div class="hidden sm:flex items-center gap-space-sm px-2 py-0.5 border border-outline-variant bg-surface-container-low rounded font-data-ticker text-data-ticker" dir="ltr">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-slow"></span>
+<span class="text-secondary font-semibold">SEC-EDGAR NODE [01]</span>
+<span class="text-outline">|</span>
+<span class="text-on-surface-variant font-normal">14ms</span>
+</div>
+<!-- Actions from JSON: Bloomberg Sync & Export Model -->
+<div class="flex items-center gap-space-xs">
+<button class="hidden xl:inline-flex items-center gap-1 px-2.5 py-1 text-on-surface-variant border border-outline-variant hover:border-outline hover:text-on-surface bg-surface-container-low font-body-compact text-body-compact rounded transition-colors duration-150">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+<span>סנכרון Bloomberg</span>
+</button>
+<button class="hidden xl:inline-flex items-center gap-1 px-2.5 py-1 text-on-primary-container bg-primary-container font-body-compact text-body-compact font-semibold rounded hover:brightness-110 transition-colors duration-150">
+<span class="material-symbols-outlined text-[14px]">file_download</span>
+<span>ייצוא מודל (XLSX)</span>
+</button>
+<!-- Icon actions: notifications, tune, terminal -->
+<div class="flex items-center border-r border-outline-variant pr-space-xs gap-0.5">
+<button class="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors rounded" title="התראות">
+<span class="material-symbols-outlined text-[16px]">notifications</span>
+</button>
+<button class="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors rounded" title="הגדרות תצוגה">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+</button>
+<button class="p-1 text-primary hover:text-on-surface hover:bg-surface-container-high transition-colors rounded" title="טרמינל">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+</button>
+</div>
+</div>
+</div>
+</header>
+<!-- ========================================================================= -->
+<!-- Sub-Header Status Ticker Bar (Institutional Live Telemetry)              -->
+<!-- ========================================================================= -->
+<div class="w-full bg-surface-container-lowest border-b border-outline-variant px-margin-desktop py-1 flex items-center justify-between text-data-ticker font-data-ticker text-on-surface-variant select-none shrink-0" dir="ltr">
+<div class="flex items-center gap-space-lg overflow-x-auto whitespace-nowrap">
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface font-semibold">NVDA:US</span>
+<span class="text-on-surface">$182.40</span>
+<span class="text-secondary font-medium">+3.42%</span>
+</div>
+<span class="text-outline-variant">/</span>
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface font-semibold">MSFT:US</span>
+<span class="text-on-surface">$428.15</span>
+<span class="text-secondary font-medium">+0.88%</span>
+</div>
+<span class="text-outline-variant">/</span>
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface font-semibold">AAPL:US</span>
+<span class="text-on-surface">$234.60</span>
+<span class="text-error font-medium">-0.41%</span>
+</div>
+<span class="text-outline-variant">/</span>
+<div class="flex items-center gap-1.5">
+<span class="text-on-surface font-semibold">TA-125</span>
+<span class="text-on-surface">2,118.4</span>
+<span class="text-secondary font-medium">+1.15%</span>
+</div>
+</div>
+<div class="hidden sm:flex items-center gap-space-md text-[10px] text-outline font-label-header">
+<span>SEC ACCESSION PIPELINE: SYNCED</span>
+<span>EDGAR 10-Q ENGINE ACTIVE</span>
+</div>
+</div>
+<!-- ========================================================================= -->
+<!-- 2. Main Content Canvas: Confirm-and-Wait / In-Flight Extraction Screen  -->
+<!-- ========================================================================= -->
+<main class="flex-1 flex flex-col justify-center items-center px-4 py-8 relative overflow-y-auto">
+<!-- Subtle technical grid background effect via fine inline lines -->
+<div class="absolute inset-0 pointer-events-none opacity-[0.03] bg-[radial-gradient(#8ed5ff_1px,transparent_1px)] [background-size:24px_24px]"></div>
+<!-- Centered Terminal Modal Canvas (Width: Max 820px) -->
+<div class="w-full max-w-3xl z-10 space-y-space-md">
+<!-- Breadcrumb & Pipeline Live Badge -->
+<div class="flex flex-wrap items-center justify-between gap-space-sm px-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[17px]">hub</span>
+<span class="font-label-header text-label-header text-outline tracking-wider uppercase">פייפליין אנליזה פיננסית</span>
+<span class="text-outline-variant text-[11px]">/</span>
+<h1 class="font-title-sm text-title-sm text-on-surface font-medium">עיבוד בקשת אנליזה // NVDA:NASDAQ</h1>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse-slow"></span>
+<span class="font-data-ticker text-data-ticker text-primary-container font-semibold">פעיל בזמן אמת</span>
+</div>
+</div>
+<!-- ===================================================================== -->
+<!-- TOP CARD: Company Confirmation Card                                  -->
+<!-- ===================================================================== -->
+<section class="bg-surface-container-low border border-outline-variant rounded p-5 relative overflow-hidden transition-all duration-150">
+<!-- Subtle corner watermark/accent marker -->
+<div class="absolute top-0 left-0 w-16 h-16 pointer-events-none bg-gradient-to-br from-primary-container/10 to-transparent"></div>
+<div class="absolute top-0 right-0 h-[2px] w-full bg-gradient-to-r from-transparent via-primary-container/40 to-transparent"></div>
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<!-- Company Info & Tags -->
+<div class="space-y-2">
+<div class="flex flex-wrap items-center gap-2.5">
+<h2 class="font-display-lg text-display-lg text-on-surface font-bold tracking-tight">NVIDIA Corporation</h2>
+<!-- Ticker badge (monospaced LTR) -->
+<span class="font-data-ticker text-data-ticker px-2 py-0.5 bg-surface-container-highest border border-primary/30 text-primary rounded" dir="ltr">
+                NVDA : NASDAQ
+              </span>
+<!-- Sector tag -->
+<span class="font-body-compact text-body-compact text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded border border-outline-variant">
+                מוליכים למחצה (Semiconductors)
+              </span>
+</div>
+<!-- Filing discovery detail -->
+<p class="font-body-default text-body-default text-on-surface-variant flex items-center gap-1.5 pt-1">
+<span class="material-symbols-outlined text-secondary text-[16px]">verified</span>
+<span>הדוח האחרון שנמצא:</span>
+<span class="text-on-surface font-medium" dir="ltr">10-Q, Q3 FY2026</span>
+<span>, פורסם בתאריך</span>
+<span class="font-data-table-cell text-data-table-cell text-primary font-medium" dir="ltr">19.11.2026</span>
+</p>
+</div>
+<!-- Action buttons inside confirmation card -->
+<div class="flex items-center gap-2 shrink-0 pt-1">
+<!-- Ghost secondary action -->
+<button class="inline-flex items-center gap-1.5 px-3 py-2 border border-outline-variant bg-transparent hover:bg-surface-container-high hover:border-outline text-on-surface-variant hover:text-on-surface font-body-compact text-body-compact rounded transition-colors duration-150">
+<span class="material-symbols-outlined text-[15px] text-error">close</span>
+<span>לא החברה הנכונה</span>
+</button>
+<!-- Primary CTA button -->
+<button class="inline-flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container font-title-sm text-title-sm font-semibold rounded hover:brightness-110 active:scale-[0.98] transition-all duration-150 shadow-[0_0_12px_rgba(56,189,248,0.25)]">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>אישור, נתחו</span>
+</button>
+</div>
+</div>
+<!-- Metadata Chips Strip (Hairline structural row) -->
+<div class="mt-4 pt-3.5 border-t border-outline-variant grid grid-cols-2 sm:grid-cols-4 gap-3 text-data-table-cell font-data-table-cell">
+<div class="bg-surface-container p-2 rounded border border-outline-variant/60">
+<span class="block font-label-header text-label-header text-outline uppercase tracking-wider mb-0.5">CIK Ident</span>
+<span class="text-on-surface font-semibold" dir="ltr">0001045810</span>
+</div>
+<div class="bg-surface-container p-2 rounded border border-outline-variant/60">
+<span class="block font-label-header text-label-header text-outline uppercase tracking-wider mb-0.5">Market Cap (USD)</span>
+<span class="text-secondary font-semibold" dir="ltr">$4.48T</span>
+</div>
+<div class="bg-surface-container p-2 rounded border border-outline-variant/60">
+<span class="block font-label-header text-label-header text-outline uppercase tracking-wider mb-0.5">תקופת דיווח פיסקלית</span>
+<span class="text-on-surface font-medium" dir="ltr">Q3 FY2026</span>
+</div>
+<div class="bg-surface-container p-2 rounded border border-outline-variant/60">
+<span class="block font-label-header text-label-header text-outline uppercase tracking-wider mb-0.5">Source Node</span>
+<span class="text-primary font-medium" dir="ltr">EDGAR Direct Access</span>
+</div>
+</div>
+</section>
+<!-- ===================================================================== -->
+<!-- 3. Vertical Step Progress Tracker (Interactive / Live Pipeline)      -->
+<!-- ===================================================================== -->
+<section class="bg-surface-container-low border border-outline-variant rounded p-5 space-y-4">
+<div class="flex items-center justify-between pb-2 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-primary">data_thresholding</span>
+<h3 class="font-title-sm text-title-sm text-on-surface font-medium">שלבי חילוץ ועיבוד נתונים (In-Flight Pipeline)</h3>
+</div>
+<div class="font-data-ticker text-data-ticker text-outline flex items-center gap-1.5" dir="ltr">
+<span>PIPELINE EXECUTION: STEP 2 OF 4</span>
+</div>
+</div>
+<!-- Steps Container -->
+<div class="space-y-4 relative">
+<!-- Connecting vertical guideline -->
+<div class="absolute right-[19px] top-4 bottom-4 w-px bg-outline-variant z-0 pointer-events-none"></div>
+<!-- ----------------------------------------------------------------- -->
+<!-- STEP 1: Done (Completed)                                         -->
+<!-- ----------------------------------------------------------------- -->
+<div class="relative z-10 flex items-start gap-3.5 group">
+<!-- Icon Indicator -->
+<div class="w-10 h-10 rounded bg-surface-container-high border border-secondary/50 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(34,197,94,0.3)]">
+<span class="material-symbols-outlined text-secondary text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<!-- Content -->
+<div class="flex-1 bg-surface-container p-3 rounded border border-outline-variant/70">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">מביא דוחות מ-SEC EDGAR</span>
+<span class="px-1.5 py-0.2 font-label-header text-label-header bg-secondary/10 text-secondary border border-secondary/30 rounded">הושלם</span>
+</div>
+<span class="font-data-ticker text-data-ticker text-outline" dir="ltr">1.42s</span>
+</div>
+<p class="font-body-compact text-body-compact text-on-surface-variant mt-1" dir="rtl">
+                קובץ 10-Q מקורי נסרק ואומת מול EDGAR Accession 
+                <span class="font-data-table-cell text-data-table-cell text-primary font-mono inline-block mx-1" dir="ltr">#0001045810-26-000045</span>
+<span class="font-data-table-cell text-data-table-cell text-outline" dir="ltr">(2026-11-19 16:04:12 EST)</span>.
+              </p>
+</div>
+</div>
+<!-- ----------------------------------------------------------------- -->
+<!-- STEP 2: In Progress (Active)                                      -->
+<!-- ----------------------------------------------------------------- -->
+<div class="relative z-10 flex items-start gap-3.5 group">
+<!-- Glowing cyan spinning loader indicator -->
+<div class="w-10 h-10 rounded bg-surface-container-highest border border-primary flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(56,189,248,0.35)]">
+<span class="material-symbols-outlined text-primary text-[20px] animate-radar">sync</span>
+</div>
+<!-- Content -->
+<div class="flex-1 bg-surface-container-high p-3 rounded border border-primary/50 relative overflow-hidden">
+<!-- Glow header hairline -->
+<div class="absolute top-0 right-0 h-[2px] w-full bg-gradient-to-r from-primary-container via-primary to-transparent"></div>
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="font-title-sm text-title-sm text-on-surface font-semibold">מחשב יחסים</span>
+<span class="px-1.5 py-0.2 font-label-header text-label-header bg-primary-container/15 text-primary border border-primary/40 rounded flex items-center gap-1">
+<span class="w-1 h-1 rounded-full bg-primary-container animate-ping"></span>
+                    בתהליך חישוב
+                  </span>
+</div>
+<span class="font-data-ticker text-data-ticker text-primary font-bold" dir="ltr">60%</span>
+</div>
+<!-- Live progress bar -->
+<div class="w-full bg-surface-container-lowest h-1.5 rounded-full overflow-hidden mt-2.5 mb-2 border border-outline-variant/60">
+<div class="bg-primary-container h-full rounded-full transition-all duration-300 w-[60%] shadow-[0_0_8px_#38bdf8]"></div>
+</div>
+<p class="font-body-compact text-body-compact text-on-surface-variant">
+                מחשב רווחיות גולמית, שיעור תפעולי, הכנסות דאטה-סנטר וערכי <span class="font-data-table-cell text-data-table-cell text-primary font-mono" dir="ltr">P/E TTM</span>. סנכרון מקבילי עם מודל קונצנזוס FactSet.
+              </p>
+</div>
+</div>
+<!-- ----------------------------------------------------------------- -->
+<!-- STEP 3: Pending (Queued)                                          -->
+<!-- ----------------------------------------------------------------- -->
+<div class="relative z-10 flex items-start gap-3.5 opacity-65 hover:opacity-90 transition-opacity duration-150">
+<!-- Icon Indicator -->
+<div class="w-10 h-10 rounded bg-surface-container border border-outline-variant flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline text-[18px]">radio_button_unchecked</span>
+</div>
+<!-- Content -->
+<div class="flex-1 bg-surface-container p-3 rounded border border-outline-variant/50">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="font-title-sm text-title-sm text-on-surface-variant font-medium">קורא חדשות</span>
+<span class="px-1.5 py-0.2 font-label-header text-label-header bg-surface-container-high text-outline rounded">ממתין בתור</span>
+</div>
+<span class="font-data-ticker text-data-ticker text-outline" dir="ltr">QUEUED</span>
+</div>
+<p class="font-body-compact text-body-compact text-outline mt-1">
+                סריקת חוטי Wire: Reuters, Bloomberg ודוחות 8-K להערכת סנטימנט מהותי ואירועי פוסט-דיווח.
+              </p>
+</div>
+</div>
+<!-- ----------------------------------------------------------------- -->
+<!-- STEP 4: Pending (Queued)                                          -->
+<!-- ----------------------------------------------------------------- -->
+<div class="relative z-10 flex items-start gap-3.5 opacity-65 hover:opacity-90 transition-opacity duration-150">
+<!-- Icon Indicator -->
+<div class="w-10 h-10 rounded bg-surface-container border border-outline-variant flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline text-[18px]">schedule</span>
+</div>
+<!-- Content -->
+<div class="flex-1 bg-surface-container p-3 rounded border border-outline-variant/50">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="font-title-sm text-title-sm text-on-surface-variant font-medium">מרכיב עמוד סיכום</span>
+<span class="px-1.5 py-0.2 font-label-header text-label-header bg-surface-container-high text-outline rounded">ממתין לסיום</span>
+</div>
+<span class="font-data-ticker text-data-ticker text-outline" dir="ltr">PENDING</span>
+</div>
+<p class="font-body-compact text-body-compact text-outline mt-1">
+                סינתזת תובנות מפתח AI, הדגשת פסקאות מהותיות מ-MD&amp;A והפקת תרשימי מכפילים היסטוריים.
+              </p>
+</div>
+</div>
+</div>
+</section>
+<!-- ===================================================================== -->
+<!-- 4. Footer / Bottom Info Note Callout                                  -->
+<!-- ===================================================================== -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-body-compact font-body-compact">
+<div class="flex items-center gap-2.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0">info</span>
+<span>הדוח החדש עוד לא פורסם? נציג מתי פורסם הדוח האחרון.</span>
+</div>
+<a class="inline-flex items-center gap-1 text-primary hover:text-primary-container transition-colors duration-150 underline decoration-outline-variant hover:decoration-primary font-medium shrink-0" href="#">
+<span>בדיקת לוח שנה של דוחות (Earnings Calendar)</span>
+<span class="material-symbols-outlined text-[14px]">arrow_back</span>
+</a>
+</section>
+</div>
+</main>
+<!-- ========================================================================= -->
+<!-- Terminal Bottom Institutional Status Bar                                 -->
+<!-- ========================================================================= -->
+<footer class="w-full bg-surface-container-lowest border-t border-outline-variant px-margin-desktop py-1 flex flex-wrap items-center justify-between font-label-header text-label-header text-outline select-none shrink-0" dir="ltr">
+<div class="flex items-center gap-space-md">
+<span class="flex items-center gap-1 text-secondary">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span>TLS 1.3 // 256-BIT ENCRYPTION</span>
+</span>
+<span>|</span>
+<span>SEC EDGAR API v4.8</span>
+<span>|</span>
+<span>BUILD: PROD-2025.1-HE-IL</span>
+</div>
+<div class="flex items-center gap-space-lg text-on-surface-variant">
+<span>SERVER: US-EAST-VIRGINIA-04</span>
+<span>WORKSPACE: INSTITUTIONAL_EQUITIES_TLV</span>
+<span class="text-primary">ALL SYSTEMS NOMINAL</span>
+</div>
+</footer>
+</body></html>

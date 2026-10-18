@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="he"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TERMINAL.IL // US EQUITIES - REPORT SUMMARY</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Rubik & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Rubik:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-secondary-fixed": "#002109",
+            "outline": "#87929a",
+            "on-secondary-container": "#004119",
+            "secondary": "#4ae176",
+            "on-error-container": "#ffdad6",
+            "on-surface-variant": "#bdc8d1",
+            "on-tertiary-fixed": "#410004",
+            "surface-container-low": "#181c21",
+            "surface": "#101419",
+            "on-primary-fixed": "#001e2c",
+            "tertiary-fixed": "#ffdad7",
+            "primary-container": "#38bdf8",
+            "surface-variant": "#31353b",
+            "outline-variant": "#3e484f",
+            "tertiary-fixed-dim": "#ffb3ad",
+            "on-background": "#e0e2ea",
+            "tertiary": "#ffbcb7",
+            "background": "#101419",
+            "inverse-on-surface": "#2d3136",
+            "error": "#ffb4ab",
+            "on-primary": "#00354a",
+            "secondary-fixed-dim": "#4ae176",
+            "error-container": "#93000a",
+            "secondary-container": "#00b954",
+            "on-surface": "#e0e2ea",
+            "surface-container-highest": "#31353b",
+            "surface-container": "#1c2025",
+            "on-tertiary-fixed-variant": "#930013",
+            "primary-fixed": "#c4e7ff",
+            "on-error": "#690005",
+            "on-tertiary": "#68000a",
+            "surface-bright": "#36393f",
+            "inverse-primary": "#00668a",
+            "on-primary-container": "#004965",
+            "on-secondary-fixed-variant": "#005321",
+            "primary-fixed-dim": "#7bd0ff",
+            "surface-dim": "#101419",
+            "on-secondary": "#003915",
+            "tertiary-container": "#ff938c",
+            "surface-tint": "#7bd0ff",
+            "surface-container-high": "#262a30",
+            "primary": "#8ed5ff",
+            "inverse-surface": "#e0e2ea",
+            "secondary-fixed": "#6bff8f",
+            "on-tertiary-container": "#8d0012",
+            "surface-container-lowest": "#0a0e13",
+            "on-primary-fixed-variant": "#004c69"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "gutter-desktop": "0.75rem",
+            "margin": "0.75rem",
+            "space-md": "0.75rem",
+            "space-xs": "0.25rem",
+            "margin-desktop": "1rem",
+            "space-lg": "1rem",
+            "space-xl": "1.5rem",
+            "gutter": "0.5rem",
+            "space-sm": "0.375rem"
+          },
+          "fontFamily": {
+            "headline-md": ["Rubik"],
+            "body-default": ["Rubik"],
+            "body-compact": ["Rubik"],
+            "data-table-cell": ["JetBrains Mono"],
+            "data-metric-lg": ["JetBrains Mono"],
+            "label-header": ["JetBrains Mono"],
+            "title-sm": ["Rubik"],
+            "display-lg": ["Rubik"],
+            "display-lg-mobile": ["Rubik"],
+            "data-ticker": ["JetBrains Mono"]
+          },
+          "fontSize": {
+            "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "500" }],
+            "body-default": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "body-compact": ["12px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "data-table-cell": ["12px", { "lineHeight": "16px", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+            "data-metric-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "label-header": ["10px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }],
+            "title-sm": ["15px", { "lineHeight": "22px", "fontWeight": "500" }],
+            "display-lg": ["30px", { "lineHeight": "38px", "fontWeight": "600" }],
+            "display-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+            "data-ticker": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Monospace tabular numeric and LTR isolations */
+    .num-ltr {
+      direction: ltr;
+      unicode-bidi: isolate;
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Subtle custom scrollbar for financial terminal panels */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0e13;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3e484f;
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #87929a;
+    }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface font-body-default antialiased min-h-screen selection:bg-primary selection:text-on-primary-fixed">
+<!-- ================= TOP APP BAR (Shared Component: TopNavBar) ================= -->
+<header class="w-full h-11 px-margin-desktop flex items-center justify-between border-b border-outline-variant bg-surface-container-lowest select-none sticky top-0 z-50">
+<!-- Brand Anchor & Search -->
+<div class="flex items-center gap-space-lg">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(74,225,118,0.7)] animate-pulse"></span>
+<span class="font-data-ticker text-data-ticker text-primary tracking-widest uppercase">TERMINAL.IL // US EQUITIES</span>
+</div>
+<!-- Search Bar -->
+<div class="relative w-64 hidden md:flex items-center">
+<span class="material-symbols-outlined text-outline text-[16px] absolute right-2 pointer-events-none">search</span>
+<input class="w-full bg-surface-container-low border border-outline-variant text-on-surface font-body-compact text-body-compact pr-8 pl-12 py-1 rounded focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container" placeholder="חיפוש מניה, סימול, או דוח SEC..." type="text" value="NVDA (NVIDIA Corp) - 10-Q Q3 2026"/>
+<span class="num-ltr text-[10px] text-outline border border-outline-variant px-1 rounded absolute left-2 bg-surface-container">⌘K</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="hidden lg:flex items-center h-full gap-space-md">
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high px-2 py-1 transition-colors duration-150 ease-in-out" href="#">סקירת שוק</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high px-2 py-1 transition-colors duration-150 ease-in-out" href="#">מניות ארה״ב</a>
+<!-- ACTIVE TAB: דוחות 10-Q/K -->
+<a class="border-b-2 border-primary-container text-primary font-title-sm text-title-sm px-2 h-full flex items-center transition-colors duration-150 ease-in-out" href="#">דוחות 10-Q/K</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high px-2 py-1 transition-colors duration-150 ease-in-out" href="#">השוואת מכפילים</a>
+<a class="text-on-surface-variant font-title-sm text-title-sm hover:text-on-surface hover:bg-surface-container-high px-2 py-1 transition-colors duration-150 ease-in-out" href="#">מעקב תיק</a>
+</nav>
+<!-- Trailing Actions & Icons -->
+<div class="flex items-center gap-space-sm">
+<button class="hidden sm:flex items-center gap-1 bg-surface-container text-outline hover:text-on-surface border border-outline-variant px-2 py-1 rounded text-body-compact font-body-compact transition-colors">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+<span>סנכרון Bloomberg</span>
+</button>
+<button class="bg-primary-container text-on-primary-fixed font-title-sm text-title-sm font-semibold px-2.5 py-1 rounded flex items-center gap-1 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-[15px]">download</span>
+<span>ייצוא מודל (XLSX)</span>
+</button>
+<div class="h-4 w-[1px] bg-outline-variant mx-1"></div>
+<button class="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded transition-colors" title="התראות">
+<span class="material-symbols-outlined text-[18px]">notifications</span>
+</button>
+<button class="p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded transition-colors" title="הגדרות תצוגה">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</button>
+<button class="p-1 text-primary hover:text-primary-fixed hover:bg-surface-container rounded transition-colors" title="טרמינל פקודות">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+</button>
+</div>
+</header>
+<!-- ================= MAIN WORKSPACE (LEFT DOCKED + MAIN CANVASES) ================= -->
+<div class="flex flex-row-reverse w-full min-h-[calc(100vh-44px)] relative">
+<!-- ================= LEFT DOCKED ASSISTANT RAIL (Shared Component: SideNavBar) ================= -->
+<aside class="fixed left-0 top-11 bottom-0 w-[380px] flex flex-col justify-between bg-surface-container-low border-r border-outline-variant z-40 overflow-hidden text-right select-none" dir="rtl">
+<!-- Panel Header & Status -->
+<div class="p-space-md border-b border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">smart_toy</span>
+<h2 class="font-title-sm text-title-sm text-on-surface font-semibold">עוזר מחקר דוחות 10-Q</h2>
+</div>
+<span class="num-ltr font-label-header text-[10px] bg-surface-container text-primary-container border border-outline-variant px-1.5 py-0.5 rounded">Claude 3.5 Sonnet / SEC</span>
+</div>
+<div class="flex items-center justify-between text-body-compact font-body-compact text-outline">
+<span class="num-ltr text-[11px] font-mono text-secondary">NVDA:US Q3 2026 Filing Active</span>
+<span class="flex items-center gap-1 text-[11px] text-outline hover:text-on-surface cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">refresh</span> איפוס שיחה
+          </span>
+</div>
+<!-- Assistant Sub-Navigation Tabs -->
+<div class="grid grid-cols-4 gap-1 mt-space-sm pt-space-xs border-t border-outline-variant">
+<button class="border-r-2 border-primary text-primary bg-surface-container-high font-medium py-1 px-1 text-center font-body-compact text-[11px] flex items-center justify-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">smart_toy</span>
+<span>עוזר 10-Q</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container py-1 px-1 text-center font-body-compact text-[11px] flex items-center justify-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">format_quote</span>
+<span>מקורות</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container py-1 px-1 text-center font-body-compact text-[11px] flex items-center justify-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">calculate</span>
+<span>סימולציה</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container py-1 px-1 text-center font-body-compact text-[11px] flex items-center justify-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">history</span>
+<span>היסטוריה</span>
+</button>
+</div>
+</div>
+<!-- Conversation Thread (Scrollable) -->
+<div class="flex-1 p-space-md overflow-y-auto space-y-space-md bg-surface-container-lowest text-right">
+<!-- User Bubble -->
+<div class="flex flex-col items-start">
+<div class="flex items-center gap-1 text-[11px] text-outline mb-1">
+<span class="material-symbols-outlined text-[13px]">person</span>
+<span>אנליסט טכנולוגיה</span>
+<span class="num-ltr text-[10px]">14:22</span>
+</div>
+<div class="bg-surface-container-high text-on-surface px-space-md py-2 rounded-lg border border-outline-variant max-w-[85%] text-body-default font-body-default">
+            למה ירד הרווח הגולמי?
+          </div>
+</div>
+<!-- AI Analyst Response Bubble -->
+<div class="flex flex-col items-start w-full">
+<div class="flex items-center gap-1 text-[11px] text-primary mb-1">
+<span class="material-symbols-outlined text-[14px]">terminal</span>
+<span class="font-semibold">ניתוח מערכת (SEC Filing Engine)</span>
+<span class="num-ltr text-[10px] text-outline">14:22:04</span>
+</div>
+<div class="bg-surface-container-low border border-outline-variant p-space-md rounded-lg w-full text-body-compact font-body-compact leading-relaxed text-on-surface space-y-2">
+<p>
+              שיעור הרווח הגולמי (<span class="num-ltr">Gross Margin</span>) ברבעון ירד ב-<span class="num-ltr text-error font-semibold">1.4</span> נקודות אחוז 
+              (ל-<span class="num-ltr font-mono font-bold text-on-surface">74.6%</span> לעומת <span class="num-ltr font-mono">76.0%</span> ברבעון הקודם). הסיבות המרכזיות לפי הנהלת החברה:
+            </p>
+<ol class="list-decimal list-inside space-y-1 pr-1 text-on-surface-variant">
+<li>
+<strong class="text-on-surface">עלויות Ramp מוקדמות</strong> של שבבי ארכיטקטורת <span class="num-ltr font-mono">Blackwell</span> החדשים.
+              </li>
+<li>
+<strong class="text-on-surface">תמהיל מוצרים (Product Mix)</strong> עם שיעור גבוה יותר של מערכות שרתים מורכבות (<span class="num-ltr font-mono">GB200 NVL72</span>) שכוללות רכיבי צד שלישי בעלי רווחיות נמוכה יותר.
+              </li>
+</ol>
+<div class="p-2 bg-surface-container rounded border-r-2 border-primary-container text-[11.5px] text-primary-fixed mt-2">
+              💡 החברה מעריכה חזרה לרווחיות של <span class="num-ltr">mid-70s</span> במחצית השנייה של שנת הכספים.
+            </div>
+<!-- Source clickable chips -->
+<div class="pt-2 border-t border-outline-variant flex flex-wrap gap-1.5">
+<button class="bg-surface-container-high hover:bg-surface-variant border border-outline-variant px-2 py-0.5 rounded text-[10.5px] text-outline hover:text-primary flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[12px]">description</span>
+<span>מקור: 10-Q, סעיף MD&amp;A, עמ' 34</span>
+</button>
+<button class="bg-surface-container-high hover:bg-surface-variant border border-outline-variant px-2 py-0.5 rounded text-[10.5px] text-outline hover:text-primary flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-[12px]">record_voice_over</span>
+<span>שיחת ועידה: הערות סמנכ"ל כספים Colette Kress</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Quick Prompt Pills -->
+<div class="pt-2">
+<div class="text-[11px] text-outline mb-1.5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">lightbulb</span>
+<span>שאלות המשך מומלצות:</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<button class="text-right bg-surface-container border border-outline-variant hover:border-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact text-on-surface hover:text-primary transition-all flex items-center justify-between group">
+<span>מה תחזית הרבעון הבא?</span>
+<span class="material-symbols-outlined text-[14px] text-outline group-hover:text-primary group-hover:-translate-x-1 transition-transform">arrow_left</span>
+</button>
+<button class="text-right bg-surface-container border border-outline-variant hover:border-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact text-on-surface hover:text-primary transition-all flex items-center justify-between group">
+<span>חשיפה לשוק הסיני (China Licensing)</span>
+<span class="material-symbols-outlined text-[14px] text-outline group-hover:text-primary group-hover:-translate-x-1 transition-transform">arrow_left</span>
+</button>
+<button class="text-right bg-surface-container border border-outline-variant hover:border-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact text-on-surface hover:text-primary transition-all flex items-center justify-between group">
+<span>התחייבויות רכש (Purchase Obligations)</span>
+<span class="material-symbols-outlined text-[14px] text-outline group-hover:text-primary group-hover:-translate-x-1 transition-transform">arrow_left</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Docked Input Command Bar -->
+<div class="p-space-md border-t border-outline-variant bg-surface-container-low">
+<div class="relative flex items-center bg-surface-container-lowest border border-outline-variant rounded focus-within:border-primary-container focus-within:ring-1 focus-within:ring-primary-container">
+<span class="num-ltr text-primary-container pl-2 font-mono font-bold select-none">&gt;</span>
+<input class="w-full bg-transparent border-0 py-2 px-2 text-body-compact font-body-compact text-on-surface placeholder:text-outline focus:ring-0 focus:outline-none" placeholder="שאלו שאלה על הדוחות או בקשו מודל הערכת שווי..." type="text"/>
+<div class="flex items-center gap-1 pl-1.5">
+<button class="p-1 text-outline hover:text-on-surface rounded hover:bg-surface-container transition-colors" title="צרף קובץ">
+<span class="material-symbols-outlined text-[17px]">attach_file</span>
+</button>
+<button class="p-1 text-outline hover:text-on-surface rounded hover:bg-surface-container transition-colors" title="קלט קולי">
+<span class="material-symbols-outlined text-[17px]">mic</span>
+</button>
+<button class="p-1 bg-primary-container text-on-primary-fixed hover:brightness-110 rounded transition-all" title="שלח שאילתה">
+<span class="material-symbols-outlined text-[17px]">arrow_upward</span>
+</button>
+</div>
+</div>
+<!-- Bottom rail tabs from JSON -->
+<div class="flex items-center justify-between mt-2 pt-1.5 border-t border-outline-variant text-[11px] text-outline">
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-1 hover:text-on-surface">
+<span class="material-symbols-outlined text-[14px]">settings</span>
+<span>הגדרות מודל</span>
+</button>
+<button class="flex items-center gap-1 hover:text-on-surface">
+<span class="material-symbols-outlined text-[14px]">hub</span>
+<span>סטטוס שרת</span>
+</button>
+</div>
+<span class="num-ltr text-[10px] text-secondary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> 18ms latency
+          </span>
+</div>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT AREA ================= -->
+<main class="flex-1 mr-0 ml-[380px] p-space-lg space-y-space-lg overflow-y-auto min-h-screen">
+<!-- 1. TOP GLOBAL & TICKER HEADER BAR -->
+<section class="bg-surface-container-low border border-outline-variant rounded p-space-md">
+<div class="flex flex-wrap items-center justify-between gap-space-md border-b border-outline-variant pb-space-sm mb-space-sm">
+<!-- Company & Report Meta -->
+<div class="flex items-center gap-space-md">
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">NVIDIA Corporation</h1>
+<span class="num-ltr font-data-ticker text-data-ticker bg-surface-container-high text-primary border border-outline-variant px-1.5 py-0.5 rounded">NVDA:NASDAQ</span>
+<span class="text-body-compact font-body-compact text-outline border-r border-outline-variant pr-2 mr-1">Semiconductors &amp; AI Hardware</span>
+</div>
+<div class="flex items-center gap-3 text-body-compact font-body-compact text-on-surface-variant mt-0.5">
+<span class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[15px]">verified</span>
+<span>דוח תקופתי 10-Q (רבעון 3 2026)</span>
+</span>
+<span class="text-outline">•</span>
+<span>פורסם בתאריך: <span class="num-ltr">19.11.2026, 16:01 EST</span></span>
+<span class="text-outline">•</span>
+<span class="text-secondary flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> נבדק ומאומת ע"י SEC EDGAR
+                </span>
+</div>
+</div>
+</div>
+<!-- Price & Delta Component -->
+<div class="flex items-center gap-space-lg">
+<div class="text-left bg-surface-container-lowest border border-outline-variant px-3 py-1.5 rounded">
+<div class="text-[10px] text-outline font-label-header">מחיר מניה בזמן אמת (USD)</div>
+<div class="flex items-baseline gap-2">
+<span class="num-ltr text-[22px] font-bold text-on-surface tracking-tight">$182.40</span>
+<span class="num-ltr text-secondary font-semibold text-[13px] flex items-center">
+                  ▲ +1.8% (+3.22)
+                </span>
+</div>
+</div>
+<!-- Quick Action Toolbar -->
+<div class="flex items-center gap-1.5">
+<button class="bg-surface-container border border-outline-variant hover:border-primary-container text-on-surface hover:text-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact flex items-center gap-1 transition-all" title="הורד דוח מלא">
+<span class="material-symbols-outlined text-[15px]">file_download</span>
+<span>ייצוא מודל (XLSX)</span>
+</button>
+<button class="bg-surface-container border border-outline-variant hover:border-primary-container text-on-surface hover:text-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact flex items-center gap-1 transition-all">
+<span class="material-symbols-outlined text-[15px]">compare_arrows</span>
+<span>השוואת עמיתים</span>
+</button>
+<a class="bg-surface-container border border-outline-variant hover:border-primary-container text-on-surface hover:text-primary px-2.5 py-1.5 rounded text-body-compact font-body-compact flex items-center gap-1 transition-all" href="#">
+<span class="material-symbols-outlined text-[15px]">open_in_new</span>
+<span>דוח SEC מקורי (EDGAR)</span>
+</a>
+<button class="p-1.5 bg-surface-container border border-outline-variant hover:text-primary rounded transition-colors" title="התראות מחיר">
+<span class="material-symbols-outlined text-[16px]">add_alert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Multiples & Quick Stats Ribbon -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 pt-1 text-center">
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">שווי שוק (Market Cap)</span>
+<span class="num-ltr font-bold text-[14px] text-on-surface">$4.48T</span>
+</div>
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">מכפיל רווח (P/E TTM)</span>
+<span class="num-ltr font-bold text-[14px] text-primary-container">38.2x</span>
+</div>
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">מכפיל מכירות (P/S)</span>
+<span class="num-ltr font-bold text-[14px] text-on-surface">22.4x</span>
+</div>
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">תזרים חופשי (FCF TTM)</span>
+<span class="num-ltr font-bold text-[14px] text-secondary">$48.2B</span>
+</div>
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">רווח למניה בדילול (EPS Diluted)</span>
+<span class="num-ltr font-bold text-[14px] text-on-surface">$0.81</span>
+</div>
+<div class="bg-surface-container px-2.5 py-1 rounded border border-outline-variant text-right">
+<span class="text-[10.5px] text-outline block">דירוג קונצנזוס (Analyst Consensus)</span>
+<span class="text-secondary font-bold text-[13px] flex items-center justify-between">
+<span>קנייה חזקה</span>
+<span class="num-ltr text-[11px] text-outline font-normal">(54/58)</span>
+</span>
+</div>
+</div>
+</section>
+<!-- 2. SECTION: שלוש נקודות לתשומת לב (Key Takeaways) -->
+<section class="space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">bolt</span>
+<h2 class="font-headline-md text-title-sm text-on-surface font-semibold">שלוש נקודות לתשומת לב (Key Takeaways)</h2>
+</div>
+<span class="text-[11px] text-outline font-data-ticker">AI EXECUTIVE SYNTHESIS // Q3 2026</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Card 1: Positive Green -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-secondary transition-all rounded p-space-md flex flex-col justify-between relative overflow-hidden group">
+<div class="absolute top-0 right-0 left-0 h-1 bg-secondary"></div>
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="num-ltr text-[13px] font-bold text-secondary bg-surface-container px-2 py-0.5 rounded border border-secondary/40 flex items-center gap-1 shadow-[0_0_6px_rgba(74,225,118,0.2)]">
+                  ▲ +62.1% YoY
+                </span>
+<span class="text-[10px] font-label-header text-outline">DATA CENTER EXPANSION</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-1.5 leading-snug">
+                הכנסות ממרכזי נתונים צמחו ב-62% לעומת הרבעון המקביל
+              </h3>
+<p class="font-body-compact text-body-compact text-on-surface-variant leading-relaxed">
+                סך ההכנסות במגזר <span class="num-ltr font-mono font-medium text-on-surface">Data Center</span> הגיעו ל-<span class="num-ltr font-mono font-bold text-secondary">30.8</span> מיליארד דולר, מונעות מביקוש מואץ למעבדי <span class="num-ltr">H100/H200</span> והתחלת אספקת <span class="num-ltr font-mono">Blackwell</span> לספקי ענן גדולים.
+              </p>
+</div>
+<div class="mt-space-md pt-2 border-t border-outline-variant flex items-center justify-between text-[11px]">
+<span class="text-outline flex items-center gap-1 hover:text-primary cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">bookmark</span>
+                מקור: 10-Q, סעיף 2, עמ' 31
+              </span>
+<span class="material-symbols-outlined text-secondary text-[16px]">trending_up</span>
+</div>
+</div>
+<!-- Card 2: Negative Red -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-error transition-all rounded p-space-md flex flex-col justify-between relative overflow-hidden group">
+<div class="absolute top-0 right-0 left-0 h-1 bg-error"></div>
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="num-ltr text-[13px] font-bold text-error bg-surface-container px-2 py-0.5 rounded border border-error/40 flex items-center gap-1 shadow-[0_0_6px_rgba(239,68,68,0.2)]">
+                  ▼ -1.4 pp QoQ
+                </span>
+<span class="text-[10px] font-label-header text-outline">MARGIN COMPRESSION</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-1.5 leading-snug">
+                שיעור הרווח הגולמי ירד ב-1.4 נקודות אחוז
+              </h3>
+<p class="font-body-compact text-body-compact text-on-surface-variant leading-relaxed">
+                ירידה ל-<span class="num-ltr font-mono font-bold text-error">74.6%</span> לעומת <span class="num-ltr font-mono">76.0%</span> ברבעון הקודם עקב עלויות התאמת ייצור מוקדמות של מערכות שרתים מורכבות ורכיבי צד ג' (<span class="num-ltr font-mono">Third-Party Systems</span>).
+              </p>
+</div>
+<div class="mt-space-md pt-2 border-t border-outline-variant flex items-center justify-between text-[11px]">
+<span class="text-outline flex items-center gap-1 hover:text-primary cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">bookmark</span>
+                מקור: 10-Q, סעיף 2, עמ' 34
+              </span>
+<span class="material-symbols-outlined text-error text-[16px]">trending_down</span>
+</div>
+</div>
+<!-- Card 3: Neutral/Warning Amber -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-tertiary-container transition-all rounded p-space-md flex flex-col justify-between relative overflow-hidden group">
+<div class="absolute top-0 right-0 left-0 h-1 bg-tertiary-container"></div>
+<div>
+<div class="flex items-center justify-between mb-2">
+<span class="num-ltr text-[13px] font-bold text-tertiary-container bg-surface-container px-2 py-0.5 rounded border border-tertiary-container/40 flex items-center gap-1">
+                  ◼ +28.3% QoQ
+                </span>
+<span class="text-[10px] font-label-header text-outline">INVENTORY SURGE WATCH</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-1.5 leading-snug">
+                המלאי עלה ב-28% ברבעון, לבדוק מול הדוח הבא
+              </h3>
+<p class="font-body-compact text-body-compact text-on-surface-variant leading-relaxed">
+                רמות המלאי עלו ל-<span class="num-ltr font-mono font-bold text-tertiary-container">6.2</span> מיליארד דולר. החברה ציינה כי מדובר בהיערכות להשקה המלאה של פלטפורמת <span class="num-ltr font-mono">GB200</span>, אך יש לעקוב אחר קצב המימוש ומחזור ימי מלאי.
+              </p>
+</div>
+<div class="mt-space-md pt-2 border-t border-outline-variant flex items-center justify-between text-[11px]">
+<span class="text-outline flex items-center gap-1 hover:text-primary cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">bookmark</span>
+                מקור: 10-Q, מאזן, עמ' 4
+              </span>
+<span class="material-symbols-outlined text-tertiary-container text-[16px]">warning</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. SECTION: יחסים פיננסיים (Financial Ratios Table) -->
+<section class="space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">table_chart</span>
+<h2 class="font-headline-md text-title-sm text-on-surface font-semibold">יחסים פיננסיים (Financial Ratios &amp; Margins)</h2>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-outline font-label-header">SOURCE: SEC 10-Q STANDARDIZED GAAP / NON-GAAP</span>
+<button class="text-outline hover:text-on-surface p-1 rounded hover:bg-surface-container" title="הורד נתונים">
+<span class="material-symbols-outlined text-[15px]">file_download</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full border-collapse text-right select-none">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-outline-variant text-[11px] font-label-header text-outline uppercase tracking-wider">
+<th class="py-2.5 px-4 font-medium text-right">יחס פיננסי (Ratio Name)</th>
+<th class="py-2.5 px-4 font-medium text-left">תקופה נוכחית (Q3 2026)</th>
+<th class="py-2.5 px-4 font-medium text-left">תקופה קודמת (Q2 2026)</th>
+<th class="py-2.5 px-4 font-medium text-left">שינוי (Delta)</th>
+<th class="py-2.5 px-4 font-medium text-left">מדד ענפי (SOX Benchmark)</th>
+<th class="py-2.5 px-2 font-medium text-center w-12">מקור</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant font-data-table-cell text-data-table-cell">
+<!-- Row 1 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface flex items-center justify-between">
+<span>צמיחה בהכנסות <span class="text-outline text-[11px]">(Revenue Growth YoY)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-semibold text-on-surface border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.8: Net Sales">94.2% YoY</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">122.4% YoY</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-error font-medium">▼ -28.2 pp</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">14.2%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.8</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="bg-surface-container hover:bg-surface-container-high transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>שיעור רווח גולמי <span class="text-outline text-[11px]">(Gross Margin)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-bold text-on-surface border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.10: Gross Profit Ratio">74.6%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">76.0%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-error font-medium">▼ -1.4 pp</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">52.8%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.10</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>שיעור רווח תפעולי <span class="text-outline text-[11px]">(Operating Margin)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-semibold text-on-surface border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.11: Operating Income">62.3%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">63.8%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-error font-medium">▼ -1.5 pp</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">28.4%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.11</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="bg-surface-container hover:bg-surface-container-high transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>שיעור רווח נקי <span class="text-outline text-[11px]">(Net Margin)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-semibold text-secondary border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.11: Net Income">55.4%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">54.8%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-secondary font-medium">▲ +0.6 pp</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">21.1%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.11</span>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>תשואה להון <span class="text-outline text-[11px]">(ROE TTM)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-bold text-secondary border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.18: Stockholders' Equity">118.2%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">114.5%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-secondary font-medium">▲ +3.7 pp</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">24.3%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.18</span>
+</td>
+</tr>
+<!-- Row 6 -->
+<tr class="bg-surface-container hover:bg-surface-container-high transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>יחס שוטף <span class="text-outline text-[11px]">(Current Ratio)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-semibold text-on-surface border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.4: Balance Sheet Liquidity">3.82</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">4.10</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-error font-medium">▼ -0.28</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">1.95</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.4</span>
+</td>
+</tr>
+<!-- Row 7 -->
+<tr class="bg-surface-container-low hover:bg-surface-container transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>יחס חוב להון <span class="text-outline text-[11px]">(Debt to Equity)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr font-semibold text-secondary border-b border-dotted border-outline hover:border-primary cursor-help" title="10-Q p.5: Total Debt obligations">0.16</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">0.18</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-secondary font-medium">▲ -0.02</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">0.45</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline group-hover:text-primary">p.5</span>
+</td>
+</tr>
+<!-- Row 8 -->
+<tr class="bg-surface-container hover:bg-surface-container-high transition-colors group">
+<td class="py-2 px-4 font-body-compact text-on-surface">
+<span>יחס הון למאזן <span class="text-outline text-[11px]">(Equity Ratio)</span></span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="text-[11px] font-body-compact text-outline bg-surface-container-highest px-2 py-0.5 rounded border border-outline-variant">לא דווח</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-on-surface-variant">68.2%</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="text-outline">-</span>
+</td>
+<td class="py-2 px-4 text-left">
+<span class="num-ltr text-outline">58.0%</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="num-ltr text-[10px] text-outline">-</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<!-- 4. SECTION: תמחור (Valuation Comparison) -->
+<section class="space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">analytics</span>
+<h2 class="font-headline-md text-title-sm text-on-surface font-semibold">תמחור ומכפילי שוק (Valuation &amp; P/E Multiples)</h2>
+</div>
+<div class="flex items-center gap-1 bg-surface-container p-0.5 rounded border border-outline-variant text-[11px] font-label-header">
+<button class="px-2 py-0.5 bg-surface-container-high text-primary rounded font-semibold">P/E TTM</button>
+<button class="px-2 py-0.5 text-outline hover:text-on-surface">Forward P/E</button>
+<button class="px-2 py-0.5 text-outline hover:text-on-surface">EV/EBITDA</button>
+<button class="px-2 py-0.5 text-outline hover:text-on-surface">P/FCF</button>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded p-space-md space-y-space-md">
+<!-- Bar Graph Comparison Layout -->
+<div class="space-y-2.5">
+<!-- Item 1: NVDA Current (Highlighted Cyan) -->
+<div class="space-y-1">
+<div class="flex items-center justify-between text-body-compact font-body-compact">
+<span class="font-bold text-primary-container flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-sm bg-primary-container"></span>
+<span>אנבידיה נוכחי (NVDA Current)</span>
+</span>
+<span class="num-ltr font-mono font-bold text-primary-container text-[13px]">38.2x</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-4 rounded overflow-hidden border border-outline-variant flex">
+<div class="bg-primary-container h-full rounded-r transition-all duration-500 shadow-[0_0_8px_rgba(56,189,248,0.4)]" style="width: 63%;"></div>
+</div>
+</div>
+<!-- Item 2: NVDA 5-Year Average (Dashed reference line visual) -->
+<div class="space-y-1">
+<div class="flex items-center justify-between text-body-compact font-body-compact">
+<span class="text-on-surface-variant flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-sm bg-outline"></span>
+<span>ממוצע 5 שנים של החברה (NVDA 5-Yr Mean)</span>
+</span>
+<span class="num-ltr font-mono font-semibold text-outline text-[13px]">46.5x</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-3 rounded overflow-hidden border border-outline-variant flex relative">
+<div class="bg-outline/60 h-full rounded-r" style="width: 77%;"></div>
+<!-- 5-yr ref line -->
+<div class="absolute top-0 bottom-0 border-r-2 border-dashed border-primary" style="left: 23%;"></div>
+</div>
+</div>
+<!-- Peer Comparison Horizontal Strip -->
+<div class="pt-2 border-t border-outline-variant grid grid-cols-1 md:grid-cols-4 gap-space-sm text-body-compact font-body-compact">
+<!-- SOX Average -->
+<div class="bg-surface-container p-2 rounded border border-outline-variant">
+<div class="text-[11px] text-outline mb-1">מדד הסקטור (SOX Semiconductor)</div>
+<div class="flex items-baseline justify-between">
+<span class="num-ltr font-bold text-on-surface text-[14px]">28.4x</span>
+<span class="num-ltr text-[11px] text-secondary">+34.5% פרמיה</span>
+</div>
+</div>
+<!-- Peer AMD -->
+<div class="bg-surface-container p-2 rounded border border-outline-variant">
+<div class="text-[11px] text-outline mb-1">עמית ישיר: <span class="num-ltr font-mono text-on-surface">AMD</span></div>
+<div class="flex items-baseline justify-between">
+<span class="num-ltr font-bold text-on-surface text-[14px]">42.1x</span>
+<span class="num-ltr text-[11px] text-error font-medium">יקרה ב-10%</span>
+</div>
+</div>
+<!-- Peer Broadcom (AVGO) -->
+<div class="bg-surface-container p-2 rounded border border-outline-variant">
+<div class="text-[11px] text-outline mb-1">עמית ישיר: <span class="num-ltr font-mono text-on-surface">AVGO</span></div>
+<div class="flex items-baseline justify-between">
+<span class="num-ltr font-bold text-on-surface text-[14px]">32.8x</span>
+<span class="num-ltr text-[11px] text-outline">דיסקאונט 14%</span>
+</div>
+</div>
+<!-- Peer Intel (INTC) -->
+<div class="bg-surface-container p-2 rounded border border-outline-variant">
+<div class="text-[11px] text-outline mb-1">עמית ישיר: <span class="num-ltr font-mono text-on-surface">INTC</span></div>
+<div class="flex items-baseline justify-between">
+<span class="num-ltr font-bold text-outline text-[14px]">19.4x</span>
+<span class="num-ltr text-[11px] text-outline">דיסקאונט 49%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Commentary Narrative Box -->
+<div class="p-space-md bg-surface-container rounded border-r-2 border-primary-container text-body-compact font-body-compact leading-relaxed text-on-surface space-y-1.5">
+<div class="flex items-center gap-1.5 text-primary-container font-semibold">
+<span class="material-symbols-outlined text-[16px]">psychology</span>
+<span>הערכת אנליסט טכנולוגיה ומודיעין תמחור:</span>
+</div>
+<p class="text-on-surface-variant">
+              מכפיל הרווח הנוכחי של אנבידיה (<span class="num-ltr font-mono font-bold text-primary-container">38.2x</span>) נמוך ב-<span class="num-ltr font-mono text-secondary">18%</span> מהממוצע ההיסטורי שלה ל-5 שנים (<span class="num-ltr font-mono">46.5x</span>), עקב צמיחת רווחים מהירה יותר מהתייקרות המניה. עם זאת, החברה נסחרת בפרמיה של <span class="num-ltr font-mono text-error">34%</span> מעל ממוצע סקטור השבבים (<span class="num-ltr font-mono">28.4x</span>) המשקפת את מעמדה המונופוליסטי בתחום מאיצי ה-AI.
+            </p>
+</div>
+<!-- Prominent Analytical Warning Disclaimer -->
+<div class="p-2.5 bg-surface-container-lowest border border-tertiary-container/50 rounded flex items-start gap-2 text-body-compact font-body-compact text-tertiary-container">
+<span class="material-symbols-outlined text-[18px] shrink-0 mt-0.5">warning</span>
+<div class="leading-snug">
+<strong class="font-semibold text-tertiary">זולה לא אומר ראויה להשקעה</strong> — תמחור נמוך היסטורית אינו ערובה לתשואה ואינו מגן מפני האטה במחזור ההשקעות של ענקיות הטכנולוגיה (<span class="num-ltr font-mono">CapEx Cycle</span>).
+            </div>
+</div>
+</div>
+</section>
+<!-- 5. SECTION: חדשות ואירועי דוח (News & Filings Feed) -->
+<section class="space-y-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">feed</span>
+<h2 class="font-headline-md text-title-sm text-on-surface font-semibold">חדשות ואירועי דוח (News &amp; Filings Feed)</h2>
+</div>
+<span class="text-[11px] text-outline font-data-ticker">LIVE SEC &amp; WIRE INGESTION</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- News Card 1 -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-outline p-space-md rounded flex flex-col justify-between transition-colors">
+<div>
+<div class="flex items-center justify-between text-[11px] text-outline mb-2">
+<span class="num-ltr font-mono text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">gavel</span>
+                  SEC 8-K Filing
+                </span>
+<span class="num-ltr">19.11.2026, 17:05 EST</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-2 leading-snug">
+                NVIDIA מגדילה את תוכנית הרכישה העצמית של מניות ב-50 מיליארד דולר נוספים
+              </h3>
+</div>
+<div class="mt-space-md pt-2.5 border-t border-outline-variant">
+<div class="text-[11.5px] bg-surface-container p-2 rounded text-on-surface-variant leading-relaxed">
+<strong class="text-secondary block mb-0.5">מה אפשר להסיק:</strong>
+                הנהלת החברה רואה במחיר הנוכחי הזדמנות ערך ומאותתת על ביטחון מוחלט ביציבות תזרים המזומנים החופשי (<span class="num-ltr font-mono">FCF</span>) לטווח של שנתיים קדימה.
+              </div>
+</div>
+</div>
+<!-- News Card 2 -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-outline p-space-md rounded flex flex-col justify-between transition-colors">
+<div>
+<div class="flex items-center justify-between text-[11px] text-outline mb-2">
+<span class="num-ltr font-mono text-tertiary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">newspaper</span>
+                  Bloomberg Markets
+                </span>
+<span class="num-ltr">18.11.2026, 11:20 EST</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-2 leading-snug">
+                עיכובים קלים בתאי קירור נוזלי אצל ספקי צד ג' עבור מתקני Blackwell
+              </h3>
+</div>
+<div class="mt-space-md pt-2.5 border-t border-outline-variant">
+<div class="text-[11.5px] bg-surface-container p-2 rounded text-on-surface-variant leading-relaxed">
+<strong class="text-tertiary-container block mb-0.5">מה אפשר להסיק:</strong>
+                סיכון תפעולי לטווח הקצר שעשוי לדחות חלק מההכנסות מהרבעון הנוכחי לרבעון הראשון של 2027, אך לא פוגע בצבר ההזמנות המצרפי.
+              </div>
+</div>
+</div>
+<!-- News Card 3 -->
+<div class="bg-surface-container-low border border-outline-variant hover:border-outline p-space-md rounded flex flex-col justify-between transition-colors">
+<div>
+<div class="flex items-center justify-between text-[11px] text-outline mb-2">
+<span class="num-ltr font-mono text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">rss_feed</span>
+                  Reuters Financial
+                </span>
+<span class="num-ltr">17.11.2026, 09:45 EST</span>
+</div>
+<h3 class="font-title-sm text-title-sm font-semibold text-on-surface mb-2 leading-snug">
+                מיקרוסופט ומטא מעלות תחזיות CapEx לשנת 2027 ב-15% נוספים לתשתיות בינה מלאכותית
+              </h3>
+</div>
+<div class="mt-space-md pt-2.5 border-t border-outline-variant">
+<div class="text-[11.5px] bg-surface-container p-2 rounded text-on-surface-variant leading-relaxed">
+<strong class="text-secondary block mb-0.5">מה אפשר להסיק:</strong>
+                תמיכה ישירה באופק הצמיחה של סגמנט ה-<span class="num-ltr font-mono">Data Center</span> מעבר לשנת 2026, ומפחיתה את החשש מ"צניחה פתאומית" בביקושים.
+              </div>
+</div>
+</div>
+</div>
+</section>
+<!-- Institutional Footer Note -->
+<footer class="pt-space-md pb-space-lg border-t border-outline-variant text-center text-body-compact font-body-compact text-outline flex flex-wrap items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-data-ticker text-data-ticker text-outline">TERMINAL.IL SEC FILINGS ANALYZER</span>
+<span>• מיועד לאנליסטים מוסמכים בלבד •</span>
+<span>כל המידע מבוסס על דיווחי SEC רשמיים</span>
+</div>
+<div class="flex items-center gap-4 num-ltr text-[11px]">
+<span>EDGAR CIK: 0001045810</span>
+<span>SIC: 3674 SEMICONDUCTORS</span>
+<span class="text-secondary flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> SEC Direct Feed Connected</span>
+</div>
+</footer>
+</main>
+</div>
+</body></html>
