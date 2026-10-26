@@ -28,7 +28,7 @@ def test_latest_quarter_values(nvda_facts, latest, previous):
         "gross_margin": 72142 / 96221,
         "operating_margin": 63734 / 96221,
         "net_margin": 59688 / 96221,
-        "roe": 59688 / 228984,
+        "roe": 192880 / 228984,
         "current_ratio": 197412 / 43019,
         "debt_to_equity": 33366 / 228984,
         "equity_ratio": 228984 / 320272,
@@ -45,7 +45,7 @@ def test_previous_quarter_values(nvda_facts, previous):
     assert r["gross_margin"]["value"] == pytest.approx(61157 / 81615, rel=REL)
     assert r["operating_margin"]["value"] == pytest.approx(53536 / 81615, rel=REL)
     assert r["net_margin"]["value"] == pytest.approx(58321 / 81615, rel=REL)
-    assert r["roe"]["value"] == pytest.approx(58321 / 195474, rel=REL)
+    assert r["roe"]["value"] == pytest.approx(159613 / 195474, rel=REL)
     assert r["current_ratio"]["value"] == pytest.approx(150995 / 43884, rel=REL)
     assert r["debt_to_equity"]["value"] == pytest.approx(8470 / 195474, rel=REL)
     assert r["equity_ratio"]["value"] == pytest.approx(195474 / 259474, rel=REL)
@@ -56,6 +56,8 @@ def test_ytd_values_never_used(nvda_facts, latest, previous):
     results = compute_ratios(nvda_facts, latest, previous)
     ytd = {177_837_000_000, 133_299_000_000, 117_270_000_000, 118_010_000_000}
     for r in results:
+        if r["key"] == "roe":  # TTM deliberately uses YTD parts
+            continue
         for inp in r["inputs"]:
             assert inp["value"] not in ytd
             if inp["start"]:
@@ -71,7 +73,6 @@ def test_inputs_carry_sources(nvda_facts, latest, previous):
         "gross_margin": ["GrossProfit", "Revenues"],
         "operating_margin": ["OperatingIncomeLoss", "Revenues"],
         "net_margin": ["NetIncomeLoss", "Revenues"],
-        "roe": ["NetIncomeLoss", "StockholdersEquity"],
         "current_ratio": ["AssetsCurrent", "LiabilitiesCurrent"],
         "debt_to_equity": ["LongTermDebt", "StockholdersEquity"],
         "equity_ratio": ["StockholdersEquity", "Assets"],
@@ -84,6 +85,12 @@ def test_inputs_carry_sources(nvda_facts, latest, previous):
             assert inp["unit"] == "USD" and inp["form"] == "10-Q" and inp["filed"] == "2026-08-26"
             if key != "revenue_growth_yoy" or inp is r[key]["inputs"][0]:
                 assert inp["end"] == "2026-07-26"
+    roe = r["roe"]
+    assert [i["concept"] for i in roe["inputs"]] == ["NetIncomeLoss"] * 3 + ["StockholdersEquity"]
+    assert [i["accession"] for i in roe["inputs"]] == ["0001045810-26-000021", LATEST_ACCN, LATEST_ACCN, LATEST_ACCN]
+    assert roe["inputs"][0]["url"].endswith("/data/1045810/000104581026000021")
+    assert roe["period_days"] is None and roe["period_he"] == "12 חודשים אחרונים"
+    assert "ROE TTM" in roe["name_he"]
     qoq = r["revenue_growth_qoq"]["inputs"]
     assert [i["accession"] for i in qoq] == [LATEST_ACCN, PREVIOUS_ACCN]
     assert [i["value"] for i in qoq] == [96_221_000_000, 81_615_000_000]
@@ -163,9 +170,9 @@ def test_growth_from_zero_prior_not_computable():
 
 @pytest.mark.parametrize("equity", [-50, 0])
 def test_non_positive_equity(equity):
-    filing = make_filing()
+    filing = make_filing(form="10-K", report_date="2026-06-30")
     facts = make_facts(filing.accession, [
-        ("NetIncomeLoss", "2026-04-01", "2026-06-30", 10),
+        ("NetIncomeLoss", "2025-07-01", "2026-06-30", 10),
         ("StockholdersEquity", None, "2026-06-30", equity),
         ("Assets", None, "2026-06-30", 200),
         ("LongTermDebt", None, "2026-06-30", 80),
@@ -315,3 +322,119 @@ def test_bank_revenue_tag_fallback():
     nm = by_key(compute_ratios(facts, filing))["net_margin"]
     assert nm["value"] == pytest.approx(0.2)
     assert nm["inputs"][1]["concept"] == "RevenuesNetOfInterestExpense"
+
+
+def test_all_results_have_uniform_schema(nvda_facts, latest, previous):
+    for r in compute_ratios(nvda_facts, latest, previous):
+        assert "note_he" in r and "period_he" in r
+        assert r["note_he"] is None
+        assert r["period_he"] == ("12 חודשים אחרונים" if r["key"] == "roe" else None)
+
+
+def test_roe_missing_components_not_reported(nvda_facts, latest):
+    import copy
+    facts = copy.deepcopy(nvda_facts)
+    ni = facts["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]
+    ni[:] = [x for x in ni if x["form"] != "10-K"]  # only the DEF 14A FY fact remains
+    roe = by_key(compute_ratios(facts, latest))["roe"]
+    assert roe["status"] == "not_reported" and roe["status_he"] == "לא דווח" and roe["value"] is None
+    assert roe["missing"] == ["רווח נקי שנתי"]
+
+
+def test_roe_10k_uses_annual_income():
+    filing = make_filing(form="10-K", report_date="2025-12-31", accession="0000000002-26-000001")
+    facts = make_facts(filing.accession, [
+        ("NetIncomeLoss", "2025-01-01", "2025-12-31", 150),
+        ("StockholdersEquity", None, "2025-12-31", 1000),
+    ])
+    roe = by_key(compute_ratios(facts, filing))["roe"]
+    assert roe["value"] == pytest.approx(0.15) and len(roe["inputs"]) == 2
+
+
+def test_roe_10q_missing_prior_ytd():
+    filing = make_filing()
+    facts = make_facts(filing.accession, [
+        ("NetIncomeLoss", "2026-01-01", "2026-06-30", 50),
+        ("NetIncomeLoss", "2025-01-01", "2025-12-31", 100, "0000000009-26-000001", "10-K"),
+        ("StockholdersEquity", None, "2026-06-30", 1000),
+    ])
+    roe = by_key(compute_ratios(facts, filing))["roe"]
+    assert roe["status"] == "not_reported"
+    assert roe["missing"] == ["רווח נקי מתחילת השנה הקודמת"]
+
+
+LEASE_FACTS = [
+    ("StockholdersEquity", None, "2026-06-30", 1000),
+    ("LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", None, "2026-06-30", 400),
+    ("ShortTermBorrowings", None, "2026-06-30", 100),
+]
+
+
+def test_lease_note_on_debt_to_equity_only():
+    filing = make_filing()
+    r = by_key(compute_ratios(make_facts(filing.accession, LEASE_FACTS), filing))
+    assert r["debt_to_equity"]["value"] == pytest.approx(0.5)
+    assert r["debt_to_equity"]["note_he"] == "החוב כולל התחייבויות חכירה מימונית (finance leases), כפי שדווחו בדוח."
+    assert all(x["note_he"] is None for k, x in r.items() if k != "debt_to_equity")
+
+
+def test_no_lease_note_for_plain_long_term_debt():
+    filing = make_filing()
+    facts = make_facts(filing.accession, [("StockholdersEquity", None, "2026-06-30", 1000),
+                                          ("LongTermDebt", None, "2026-06-30", 400)])
+    assert by_key(compute_ratios(facts, filing))["debt_to_equity"]["note_he"] is None
+
+
+BANK_FACTS = [
+    ("RevenuesNetOfInterestExpense", "2026-04-01", "2026-06-30", 500),
+    ("GrossProfit", "2026-04-01", "2026-06-30", 400),
+    ("OperatingIncomeLoss", "2026-04-01", "2026-06-30", 200),
+    ("NetIncomeLoss", "2026-04-01", "2026-06-30", 100),
+    ("AssetsCurrent", None, "2026-06-30", 10), ("LiabilitiesCurrent", None, "2026-06-30", 5),
+    ("StockholdersEquity", None, "2026-06-30", 1000), ("Assets", None, "2026-06-30", 5000),
+    ("LongTermDebt", None, "2026-06-30", 400),
+]
+
+
+def test_bank_ratios_not_applicable():
+    filing = make_filing()
+    facts = make_facts(filing.accession, BANK_FACTS)
+    r = by_key(compute_ratios(facts, filing, is_bank=True))
+    assert [x["key"] for x in compute_ratios(facts, filing, is_bank=True)] == KEYS
+    for key in ("gross_margin", "operating_margin", "current_ratio", "debt_to_equity"):
+        assert r[key]["status"] == "not_applicable"
+        assert r[key]["status_he"] == "לא רלוונטי לבנקים"
+        assert r[key]["value"] is None and r[key]["inputs"] == []
+    assert r["net_margin"]["value"] == pytest.approx(0.2)
+    assert r["equity_ratio"]["value"] == pytest.approx(0.2)
+
+
+def test_non_bank_unchanged():
+    filing = make_filing()
+    r = by_key(compute_ratios(make_facts(filing.accession, BANK_FACTS), filing))
+    assert r["gross_margin"]["value"] == pytest.approx(0.8)
+    assert r["debt_to_equity"]["value"] == pytest.approx(0.4)
+    assert r["current_ratio"]["value"] == pytest.approx(2)
+
+
+def test_formulas_use_actual_concepts():
+    filing = make_filing()
+    r = by_key(compute_ratios(make_facts(filing.accession, BANK_FACTS), filing))
+    for key in ("gross_margin", "operating_margin", "net_margin"):
+        assert r[key]["formula"].endswith("/ RevenuesNetOfInterestExpense"), key
+    assert r["operating_margin"]["formula"].startswith("OperatingIncomeLoss")
+
+
+@pytest.mark.parametrize("sic,expected", [("6022", True), ("3674", False), (None, False), ("zzz", False)])
+def test_analyze_bank_flag(nvda_submissions, nvda_facts, fake_time, sic, expected):
+    import copy
+    subs = copy.deepcopy(nvda_submissions)
+    if sic is None:
+        subs.pop("sic", None)
+    else:
+        subs["sic"] = sic
+    result = analyze("NVDA", _client_with(subs, nvda_facts, fake_time))
+    assert result["is_bank"] is expected and result["sic"] == sic
+    statuses = {r["key"]: r["status"] for r in result["latest"]["ratios"]}
+    assert (statuses["gross_margin"] == "not_applicable") is expected
+    assert (by_key(result["previous"]["ratios"])["current_ratio"]["status"] == "not_applicable") is expected

@@ -33,11 +33,18 @@ SHORT_TERM_BORROWINGS_TAGS = ("ShortTermBorrowings",)
 DEBT_TOTAL_TAGS = ("LongTermDebt",)
 DEBT_NONCURRENT_TAGS = ("LongTermDebtNoncurrent",)
 DEBT_CURRENT_TAGS = ("LongTermDebtCurrent", "DebtCurrent")
+DEBT_LEASE_INCL_CURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",)
+DEBT_LEASE_NONCURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligations",)
+DEBT_LEASE_CURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligationsCurrent",)
+NOTES_AND_LOANS_TAGS = ("NotesAndLoansPayable",)
+BANK_SICS = frozenset({"6021", "6022", "6029", "6035", "6036"})
 
 ALL_TAGS = (
     REVENUE_TAGS + GROSS_PROFIT_TAGS + COST_TAGS + OPERATING_INCOME_TAGS + NET_INCOME_TAGS
     + EQUITY_TAGS + ASSETS_TAGS + CURRENT_ASSETS_TAGS + CURRENT_LIABILITIES_TAGS
     + SHORT_TERM_BORROWINGS_TAGS + DEBT_TOTAL_TAGS + DEBT_NONCURRENT_TAGS + DEBT_CURRENT_TAGS
+    + DEBT_LEASE_INCL_CURRENT_TAGS + DEBT_LEASE_NONCURRENT_TAGS + DEBT_LEASE_CURRENT_TAGS
+    + NOTES_AND_LOANS_TAGS
 )
 
 
@@ -76,6 +83,10 @@ class SourcedValue:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def is_bank_sic(sic: Any) -> bool:
+    return str(sic).strip() in BANK_SICS
 
 
 def filing_url(cik: int, accession: str, primary_document: str) -> str:
@@ -152,11 +163,14 @@ class FilingFacts:
         return max(ends) if ends else None
 
     def _sourced(self, tag: str, fact: dict[str, Any]) -> SourcedValue:
+        accession = fact.get("accn") or self.filing.accession
+        # Facts borrowed from another filing link to that filing's folder.
+        url = (self.filing.url if accession == self.filing.accession
+               else filing_url(self.filing.cik, accession, ""))
         return SourcedValue(
             concept=tag, value=fact["val"], unit="USD", start=fact.get("start"),
-            end=fact["end"], accession=self.filing.accession,
-            form=fact.get("form") or self.filing.form, filed=fact.get("filed") or "",
-            url=self.filing.url,
+            end=fact["end"], accession=accession,
+            form=fact.get("form") or self.filing.form, filed=fact.get("filed") or "", url=url,
         )
 
     def _pick(self, tags: Iterable[str], accept) -> SourcedValue | None:
@@ -191,20 +205,89 @@ class FilingFacts:
             lambda f: not f.get("start") and _parse_date(f.get("end")) == self.report_date,
         )
 
-    def debt(self) -> tuple[list[SourcedValue], str] | None:
-        """Debt components and a formula, following the plan's two chains."""
-        borrowings = self.instant(SHORT_TERM_BORROWINGS_TAGS)
-        extra = [borrowings] if borrowings else []
+    def debt(self) -> tuple[list[SourcedValue], str, bool] | None:
+        """Debt components, a formula, and whether finance leases are included."""
+        borrowings = (self.instant(SHORT_TERM_BORROWINGS_TAGS)
+                      or self.instant(NOTES_AND_LOANS_TAGS))
+        lease = False
         total = self.instant(DEBT_TOTAL_TAGS)
         if total:
-            parts = [total, *extra]
+            parts = [total]
+        elif (noncurrent := self.instant(DEBT_NONCURRENT_TAGS)) and (
+            current := self.instant(DEBT_CURRENT_TAGS)
+        ):
+            parts = [noncurrent, current]
+        elif incl := self.instant(DEBT_LEASE_INCL_CURRENT_TAGS):
+            parts, lease = [incl], True
+        elif (lease_nc := self.instant(DEBT_LEASE_NONCURRENT_TAGS)) and (
+            lease_cur := self.instant(DEBT_LEASE_CURRENT_TAGS)
+        ):
+            parts, lease = [lease_nc, lease_cur], True
         else:
-            noncurrent = self.instant(DEBT_NONCURRENT_TAGS)
-            current = self.instant(DEBT_CURRENT_TAGS)
-            if not (noncurrent and current):
-                return None
-            parts = [noncurrent, current, *extra]
-        return parts, " + ".join(p.concept for p in parts)
+            return None
+        if borrowings:
+            parts.append(borrowings)
+        return parts, " + ".join(p.concept for p in parts), lease
+
+    def _all_usd(self, tag: str) -> Iterable[dict[str, Any]]:
+        units = (self._gaap.get(tag) or {}).get("units") or {}
+        return [x for x in units.get("USD") or [] if _is_number(x.get("val"))]
+
+    def ttm_net_income(self) -> dict[str, SourcedValue | None]:
+        """Components of trailing-twelve-month net income (one concept for all parts).
+
+        10-K: {"annual"}. 10-Q: {"annual", "ytd", "prior_ytd"}; TTM = annual + ytd - prior_ytd.
+        """
+        if self.filing.form == "10-K":
+            return {"annual": self.duration(NET_INCOME_TAGS)}
+        empty: dict[str, SourcedValue | None] = {"annual": None, "ytd": None, "prior_ytd": None}
+        if self.report_date is None:
+            return empty
+        best = empty
+        for tag in NET_INCOME_TAGS:
+            parts = self._ttm_parts(tag)
+            if all(parts.values()):
+                return parts
+            if sum(v is not None for v in parts.values()) > sum(v is not None for v in best.values()):
+                best = parts
+        return best
+
+    def _ttm_parts(self, tag: str) -> dict[str, SourcedValue | None]:
+        assert self.report_date is not None
+        parts: dict[str, SourcedValue | None] = {"annual": None, "ytd": None, "prior_ytd": None}
+        own = [x for x in self._entries(tag)]
+
+        def span(fact: dict[str, Any]) -> tuple[date, date] | None:
+            start, end = _parse_date(fact.get("start")), _parse_date(fact.get("end"))
+            return (start, end) if start and end else None
+
+        ytd_candidates = [
+            (x, s, e) for x in own if (se := span(x)) for s, e in [se]
+            if e == self.report_date and (e - s).days < PERIOD_BANDS["10-K"][0]
+        ]
+        if not ytd_candidates:
+            return parts
+        ytd, ytd_start, ytd_end = max(
+            ytd_candidates, key=lambda c: ((c[2] - c[1]).days, c[0].get("filed") or ""))
+        ytd_days = (ytd_end - ytd_start).days
+        parts["ytd"] = self._sourced(tag, ytd)
+
+        prior = [
+            x for x in own if (se := span(x))
+            and abs((se[1] - se[0]).days - ytd_days) <= 7
+            and PRIOR_YEAR_GAP[0] <= (self.report_date - se[1]).days <= PRIOR_YEAR_GAP[1]
+        ]
+        if prior:
+            parts["prior_ytd"] = self._sourced(tag, max(prior, key=lambda x: x.get("filed") or ""))
+
+        annual = [
+            x for x in self._all_usd(tag) if x.get("form") == "10-K" and (se := span(x))
+            and PERIOD_BANDS["10-K"][0] <= (se[1] - se[0]).days <= PERIOD_BANDS["10-K"][1]
+            and 0 <= (ytd_start - se[1]).days <= 7
+        ]
+        if annual:
+            parts["annual"] = self._sourced(tag, max(annual, key=lambda x: x.get("filed") or ""))
+        return parts
 
 
 def filings_with_facts(facts_json: dict[str, Any], filings: list[Filing]) -> list[Filing]:
@@ -220,11 +303,13 @@ def filings_with_facts(facts_json: dict[str, Any], filings: list[Filing]) -> lis
 
 def find_company_filings(
     client: SecClient, ticker: str
-) -> tuple[str, int, str, list[Filing]]:
-    """Resolve a ticker; return (ticker, cik, company title, periodic filings newest first)."""
+) -> tuple[str, int, str, list[Filing], str | None]:
+    """Resolve a ticker; return (ticker, cik, title, periodic filings newest first, SIC)."""
     ticker = normalize_ticker(ticker)
     cik, title = resolve_ticker(client, ticker)
-    filings = list_periodic_filings(client.submissions(cik), cik)
+    submissions = client.submissions(cik)
+    filings = list_periodic_filings(submissions, cik)
     if not filings:
         raise NoPeriodicFilings(ticker, title)
-    return ticker, cik, title, filings
+    sic = submissions.get("sic")
+    return ticker, cik, title, filings, str(sic) if sic else None

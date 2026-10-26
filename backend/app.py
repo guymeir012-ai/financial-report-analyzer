@@ -44,7 +44,7 @@ def create_app(client: SecClient | None = None) -> Flask:
 
     @app.get("/api/filings/<ticker>")
     def filings(ticker: str):
-        symbol, cik, title, periodic = f.find_company_filings(get_client(), ticker)
+        symbol, cik, title, periodic, _ = f.find_company_filings(get_client(), ticker)
         latest, previous = f.latest_and_previous(periodic)
         return jsonify({
             "company": title,

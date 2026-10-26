@@ -14,7 +14,7 @@ NAMES_HE = {
     "gross_margin": "שיעור רווח גולמי (Gross Margin)",
     "operating_margin": "שיעור רווח תפעולי (Operating Margin)",
     "net_margin": "שיעור רווח נקי (Net Margin)",
-    "roe": "תשואה להון (ROE)",
+    "roe": "תשואה להון, 12 חודשים אחרונים (ROE TTM)",
     "current_ratio": "יחס שוטף (Current Ratio)",
     "debt_to_equity": "חוב להון (Debt to Equity)",
     "equity_ratio": "הון למאזן (Equity Ratio)",
@@ -31,18 +31,27 @@ ITEMS_HE = {
     "current_assets": "נכסים שוטפים",
     "current_liabilities": "התחייבויות שוטפות",
     "debt": "חוב",
+    "annual_net_income": "רווח נקי שנתי",
+    "ytd_net_income": "רווח נקי מתחילת השנה",
+    "prior_ytd_net_income": "רווח נקי מתחילת השנה הקודמת",
 }
+NOT_APPLICABLE_HE = "לא רלוונטי לבנקים"
+BANK_NOT_APPLICABLE = ("gross_margin", "operating_margin", "current_ratio", "debt_to_equity")
+LEASE_NOTE_HE = "החוב כולל התחייבויות חכירה מימונית (finance leases), כפי שדווחו בדוח."
+TTM_PERIOD_HE = "12 חודשים אחרונים"
 
 
 def _result(
     key: str, status: str, formula: str, period_days: int | None = None,
     inputs: list[SourcedValue] | None = None, value: float | None = None,
     reason: str = "", missing: list[str] | None = None,
+    note_he: str | None = None, period_he: str | None = None,
 ) -> dict[str, Any]:
     status_he = {
         "ok": "חושב",
         "not_reported": NOT_REPORTED_HE,
         "not_computable": f"לא ניתן לחישוב: {reason}",
+        "not_applicable": NOT_APPLICABLE_HE,
     }[status]
     return {
         "key": key,
@@ -54,6 +63,8 @@ def _result(
         "period_days": period_days,
         "inputs": [i.to_dict() for i in inputs or []],
         "missing": missing or [],
+        "note_he": note_he,
+        "period_he": period_he,
     }
 
 
@@ -97,7 +108,8 @@ def _growth(key: str, formula: str, current: SourcedValue | None, base: SourcedV
 
 
 def compute_ratios(
-    facts_json: dict[str, Any], filing: Filing, previous_filing: Filing | None = None
+    facts_json: dict[str, Any], filing: Filing, previous_filing: Filing | None = None,
+    is_bank: bool = False,
 ) -> list[dict[str, Any]]:
     ff = FilingFacts(facts_json, filing)
     revenue = ff.duration(f.REVENUE_TAGS)
@@ -125,21 +137,16 @@ def compute_ratios(
     gross_formula, gross_value, gross_inputs = _gross_profit(ff, revenue)
     out.append(_margin("gross_margin", gross_formula, period, revenue, gross_value,
                        gross_inputs, "gross_profit"))
-    for key, formula, item, name in (
-        ("operating_margin", "OperatingIncomeLoss / Revenues", operating, "operating_income"),
-        ("net_margin", "NetIncomeLoss / Revenues", net, "net_income"),
+    rev_name = revenue.concept if revenue else "Revenues"
+    for key, default, item, name in (
+        ("operating_margin", "OperatingIncomeLoss", operating, "operating_income"),
+        ("net_margin", "NetIncomeLoss", net, "net_income"),
     ):
+        formula = f"{item.concept if item else default} / {rev_name}"
         out.append(_margin(key, formula, period, revenue, item.value if item else None,
                            [item] if item else [], name))
 
-    # Return on equity (period income over period-end equity, not annualized)
-    net_period = _days(net)
-    if (gap := _missing("roe", "NetIncomeLoss / StockholdersEquity", net_period,
-                        {"net_income": net, "equity": equity})):
-        out.append(gap)
-    else:
-        out.append(_divide("roe", f"{net.concept} / {equity.concept}", net.value, equity.value,
-                           [net, equity], net_period, "ההון העצמי", positive_only=True))
+    out.append(_roe(ff, equity))
 
     # Current ratio
     if (gap := _missing("current_ratio", "AssetsCurrent / LiabilitiesCurrent", None,
@@ -154,14 +161,18 @@ def compute_ratios(
     debt = ff.debt()
     parts = debt[0] if debt else []
     debt_formula = debt[1] if debt else "LongTermDebt"
+    lease_note = LEASE_NOTE_HE if debt and debt[2] else None
     de_formula = f"({debt_formula}) / StockholdersEquity" if len(parts) > 1 else f"{debt_formula} / StockholdersEquity"
     found_de = {"debt": parts[0] if parts else None, "equity": equity}
     if (gap := _missing("debt_to_equity", de_formula, None, found_de)):
         gap["inputs"] = [i.to_dict() for i in [*parts, *([equity] if equity else [])]]
+        gap["note_he"] = lease_note
         out.append(gap)
     else:
-        out.append(_divide("debt_to_equity", de_formula, sum(p.value for p in parts), equity.value,
-                           [*parts, equity], None, "ההון העצמי", positive_only=True))
+        de = _divide("debt_to_equity", de_formula, sum(p.value for p in parts), equity.value,
+                     [*parts, equity], None, "ההון העצמי", positive_only=True)
+        de["note_he"] = lease_note
+        out.append(de)
 
     # Equity ratio
     if (gap := _missing("equity_ratio", "StockholdersEquity / Assets", None,
@@ -171,7 +182,39 @@ def compute_ratios(
         out.append(_divide("equity_ratio", f"{equity.concept} / {assets.concept}",
                            equity.value, assets.value, [equity, assets], None, "הנכסים",
                            positive_only=True))
+    if is_bank:
+        out = [
+            _result(r["key"], "not_applicable", r["formula"]) if r["key"] in BANK_NOT_APPLICABLE else r
+            for r in out
+        ]
     return out
+
+
+def _roe(ff: FilingFacts, equity: SourcedValue | None) -> dict[str, Any]:
+    """Return on equity over trailing twelve months, divided by period-end equity."""
+    parts = ff.ttm_net_income()
+    eq_name = equity.concept if equity else "StockholdersEquity"
+    concept = next((p.concept for p in parts.values() if p), "NetIncomeLoss")
+    if "ytd" in parts:
+        formula = f"({concept} annual + {concept} YTD - {concept} prior-year YTD) / {eq_name}"
+        labels = {"annual": "annual_net_income", "ytd": "ytd_net_income",
+                  "prior_ytd": "prior_ytd_net_income"}
+    else:
+        formula = f"{concept} annual / {eq_name}"
+        labels = {"annual": "annual_net_income"}
+    found = {labels[k]: v for k, v in parts.items()}
+    found["equity"] = equity
+    inputs = [v for v in found.values() if v is not None]
+    gone = [ITEMS_HE[n] for n, v in found.items() if v is None]
+    if gone:
+        return _result("roe", "not_reported", formula, None, inputs, missing=gone,
+                       period_he=TTM_PERIOD_HE)
+    ttm = parts["annual"].value
+    if "ytd" in parts:
+        ttm += parts["ytd"].value - parts["prior_ytd"].value
+    res = _divide("roe", formula, ttm, equity.value, inputs, None, "ההון העצמי", positive_only=True)
+    res["period_he"] = TTM_PERIOD_HE
+    return res
 
 
 def _margin(key: str, formula: str, period: int | None, revenue: SourcedValue | None,
@@ -189,7 +232,7 @@ def _gross_profit(ff: FilingFacts, revenue: SourcedValue | None):
     """Gross profit as (formula, value, inputs); falls back to revenue minus cost."""
     reported = ff.duration(f.GROSS_PROFIT_TAGS)
     if reported:
-        return f"{reported.concept} / Revenues", reported.value, [reported]
+        return f"{reported.concept} / {revenue.concept if revenue else 'Revenues'}", reported.value, [reported]
     cost = ff.duration(f.COST_TAGS)
     if revenue and cost:
         formula = f"({revenue.concept} - {cost.concept}) / {revenue.concept}"
@@ -216,7 +259,7 @@ def _growth_vs_previous(
 
 
 def analyze(ticker: str, client: SecClient) -> dict[str, Any]:
-    ticker, cik, title, periodic = f.find_company_filings(client, ticker)
+    ticker, cik, title, periodic, sic = f.find_company_filings(client, ticker)
     facts_json = client.company_facts(cik)
     available = f.filings_with_facts(facts_json, periodic)
     notice_he: str | None = None
@@ -232,19 +275,22 @@ def analyze(ticker: str, client: SecClient) -> dict[str, Any]:
     else:
         chain, pending = periodic, []
         notice_he = "הנתונים המובנים של SEC לחברה הזו עדיין לא זמינים."
+    is_bank = f.is_bank_sic(sic)
     latest = chain[0]
     previous = chain[1] if len(chain) > 1 else None
     return {
         "company": title,
         "cik": cik,
         "ticker": ticker,
+        "sic": sic,
+        "is_bank": is_bank,
         "latest": {
             "filing": latest.to_dict(),
-            "ratios": compute_ratios(facts_json, latest, previous),
+            "ratios": compute_ratios(facts_json, latest, previous, is_bank),
         },
         "previous": {
             "filing": previous.to_dict(),
-            "ratios": compute_ratios(facts_json, previous, chain[2] if len(chain) > 2 else None),
+            "ratios": compute_ratios(facts_json, previous, chain[2] if len(chain) > 2 else None, is_bank),
         } if previous else None,
         "pending_filings": [x.to_dict() for x in pending],
         "notice_he": notice_he,

@@ -33,7 +33,7 @@ def test_pinned_filing_ratios(client):
         "gross_margin": 72142 / 96221,
         "operating_margin": 63734 / 96221,
         "net_margin": 59688 / 96221,
-        "roe": 59688 / 228984,
+        "roe": 192880 / 228984,
         "current_ratio": 197412 / 43019,
         "debt_to_equity": 33366 / 228984,
         "equity_ratio": 228984 / 320272,

@@ -25,15 +25,22 @@
 4. רווח נקי: NetIncomeLoss, ואז ProfitLoss.
 5. הון עצמי: StockholdersEquity, ואז StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest.
 6. נכסים: Assets. נכסים שוטפים: AssetsCurrent. התחייבויות שוטפות: LiabilitiesCurrent.
-7. חוב: (א) LongTermDebt ועוד ShortTermBorrowings אם דווח. (ב) LongTermDebtNoncurrent ועוד LongTermDebtCurrent או DebtCurrent, ועוד ShortTermBorrowings אם דווח. אם אין אף אחד: לא דווח.
+7. חוב: (א) LongTermDebt ועוד ShortTermBorrowings אם דווח. (ב) LongTermDebtNoncurrent ועוד LongTermDebtCurrent או DebtCurrent, ועוד ShortTermBorrowings אם דווח. (ג) LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities. (ד) LongTermDebtAndCapitalLeaseObligations ועוד LongTermDebtAndCapitalLeaseObligationsCurrent (שניהם חובה). אם אין אף אחד: לא דווח.
+8. חוב לזמן קצר, לכל שרשרת: ShortTermBorrowings, ואם חסר NotesAndLoansPayable. אף פעם לא שניהם, ולא CommercialPaper לבד (הוא בדרך כלל כלול בהם).
+9. בשרשרת (ג) או (ד) החוב כולל חכירה מימונית, ובחוב להון מוצגת הערה (note_he).
 
 ## יחסים
 1. צמיחת הכנסות לעומת שנה קודמת (YoY), ולעומת הדוח הקודם (רק אם שני הדוחות באותו אורך תקופה).
 2. שיעור רווח גולמי, תפעולי ונקי = רווח חלקי הכנסות.
-3. תשואה להון = רווח נקי של התקופה חלקי הון בסוף התקופה (לא מחושב לשנה; אורך התקופה מוחזר).
+3. תשואה להון (ROE) ל-12 חודשים אחרונים, חלקי הון בסוף התקופה.
+   - דוח 10-K: הרווח הנקי השנתי.
+   - דוח 10-Q: רווח שנתי (מדוח 10-K בלבד) ועוד רווח מתחילת השנה פחות רווח מתחילת השנה הקודמת.
+   - שלושת המרכיבים מאותה תגית. מרכיב חסר: לא דווח, בלי נפילה לרבעון.
+   - מקור כל מרכיב מציג את הדוח שלו.
 4. יחס שוטף = נכסים שוטפים חלקי התחייבויות שוטפות.
 5. חוב להון = חוב חלקי הון. הון למאזן = הון חלקי נכסים.
-6. מכנה אפס או הון שלילי: "לא ניתן לחישוב" עם סיבה, לא מספר.
+6. בנקים (SIC 6021, 6022, 6029, 6035, 6036): רווח גולמי, רווח תפעולי, יחס שוטף וחוב להון מסומנים "לא רלוונטי לבנקים".
+7. מכנה אפס או הון שלילי: "לא ניתן לחישוב" עם סיבה, לא מספר.
 
 ## מבנה קוד
 1. backend/config.py: טעינת .env, בדיקה שיש User-Agent עם מייל.
