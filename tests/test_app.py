@@ -97,5 +97,12 @@ def test_unexpected_error_500_no_leak(nvda_client, monkeypatch):
 
 
 def test_unknown_route_and_method_json(http):
-    assert_hebrew_error(http.get("/nope"), 404)
+    assert_hebrew_error(http.get("/api/nope"), 404)
     assert_hebrew_error(http.post("/api/health"), 405)
+
+
+def test_unknown_page_is_html_404(http):
+    resp = http.get("/nope")
+    assert resp.status_code == 404 and resp.mimetype == "text/html"
+    text = resp.get_data(as_text=True)
+    assert "הדף לא נמצא" in text and not any(bad in text for bad in FORBIDDEN)

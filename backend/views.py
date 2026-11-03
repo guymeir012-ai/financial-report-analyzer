@@ -105,6 +105,13 @@ def safe_sec_url(url: Any) -> str | None:
     return None
 
 
+def isolate_forms(text: str | None) -> str | None:
+    """Keep form names such as 10-Q left-to-right inside Hebrew sentences."""
+    if not text:
+        return text
+    return re.sub(r"\b(10-[QK])\b", "\u2066\\1\u2069", text)
+
+
 def split_name(name_he: str) -> tuple[str, str]:
     """'שם בעברית (English Name)' -> ('שם בעברית', 'English Name')."""
     match = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", name_he)
@@ -157,7 +164,7 @@ def build_source(ratio: dict[str, Any], report_date: str) -> dict[str, Any] | No
         "name_he": split_name(ratio["name_he"])[0],
         "formula": ratio.get("formula", ""),
         "status": ratio.get("status"),
-        "status_he": ratio.get("status_he", ""),
+        "status_he": isolate_forms(ratio.get("status_he", "")),
         "components": components,
         "missing": list(missing),
     }
@@ -168,7 +175,7 @@ def build_cell(key: str, ratio: dict[str, Any] | None, report_date: str) -> dict
     if ratio is None:
         return {"kind": "none", "ok": False, "text": NO_CHANGE, "source": None}
     ok = ratio.get("status") == "ok" and _finite(ratio.get("value"))
-    text = format_value(key, ratio["value"]) if ok else ratio.get("status_he") or NO_CHANGE
+    text = format_value(key, ratio["value"]) if ok else isolate_forms(ratio.get("status_he")) or NO_CHANGE
     return {"kind": "value" if ok else "status", "ok": ok, "text": text,
             "source": build_source(ratio, report_date)}
 
@@ -204,7 +211,7 @@ def build_summary(analysis: dict[str, Any]) -> dict[str, Any]:
             "key": key,
             "name": name,
             "name_en": name_en,
-            "note_he": current.get("note_he"),
+            "note_he": isolate_forms(current.get("note_he")),
             "period_he": current.get("period_he"),
             "current": build_cell(key, current, latest_filing.get("report_date", "")),
             "previous": (build_cell(key, prior, previous_filing.get("report_date", ""))
