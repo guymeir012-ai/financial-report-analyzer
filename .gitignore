@@ -17,3 +17,6 @@ venv/
 
 # Local Claude settings (personal, not shared)
 .claude/settings.local.json
+
+# Local SEC response cache
+.cache/

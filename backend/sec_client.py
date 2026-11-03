@@ -1,9 +1,16 @@
 """Rate-limited, retrying HTTP client for SEC EDGAR (www.sec.gov / data.sec.gov)."""
 import difflib
+import hashlib
+import json
+import logging
+import os
 import re
+import tempfile
 import threading
 import time
-from typing import Any
+from pathlib import Path
+from time import time as _wall_time
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import requests
@@ -16,7 +23,12 @@ COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.js
 ALLOWED_HOSTS = frozenset({"www.sec.gov", "data.sec.gov"})
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 TICKER_MAP_TTL = 24 * 60 * 60
+# Disk-cache lifetime in seconds: the ticker list changes slowly, filings show up within hours.
+DISK_TTL_TICKERS = 24 * 60 * 60
+DISK_TTL_DEFAULT = 6 * 60 * 60
 _TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,9}$")
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "ConfigError", "SecClient", "SecError", "InvalidTicker", "TickerNotFound",
@@ -52,6 +64,8 @@ class SecClient:
         min_interval: float = 0.11,
         timeout: float = 15,
         max_retries: int = 3,
+        cache_dir: str | os.PathLike[str] | None = None,
+        wall_clock: Callable[[], float] | None = None,
     ) -> None:
         if not user_agent or not re.search(r"[^\s@]+@[^\s@]+\.[^\s@]+", user_agent):
             raise ConfigError("SEC User-Agent must contain a contact email")
@@ -62,6 +76,8 @@ class SecClient:
         self._max_retries = max_retries
         self._rate_lock = threading.Lock()
         self._next_allowed = 0.0
+        self._cache_dir = Path(cache_dir) if cache_dir else None
+        self._wall_clock = wall_clock or _wall_time
         self._cache_lock = threading.Lock()
         self._ticker_cache: tuple[float, dict[str, dict[str, Any]]] | None = None
 
@@ -78,6 +94,67 @@ class SecClient:
     def _get_json(self, url: str) -> Any:
         if urlparse(url).hostname not in ALLOWED_HOSTS or not url.startswith("https://"):
             raise SecError("כתובת לא מורשית.")
+        cached = self._disk_read(url)
+        ttl = DISK_TTL_TICKERS if url == TICKERS_URL else DISK_TTL_DEFAULT
+        if cached and 0 <= self._wall_clock() - cached[0] < ttl:
+            return cached[1]
+        try:
+            data = self._fetch_json(url)
+        except SecError as exc:
+            # A missing resource is final; any other failure may be transient, so an old copy beats an error.
+            if cached and exc.status != 404:
+                log.warning("SEC unavailable (status=%s), serving stale cached copy", exc.status)
+                return cached[1]
+            raise
+        self._disk_write(url, data)
+        return data
+
+    def _cache_path(self, url: str) -> Path | None:
+        if self._cache_dir is None:
+            return None
+        return self._cache_dir / f"{hashlib.sha256(url.encode('utf-8')).hexdigest()}.json"
+
+    def _disk_read(self, url: str) -> tuple[float, Any] | None:
+        path = self._cache_path(url)
+        if path is None:
+            return None
+        try:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            fetched_at = entry["fetched_at"]
+            if (entry["url"] != url or "data" not in entry
+                    or isinstance(fetched_at, bool) or not isinstance(fetched_at, (int, float))):
+                return None
+            return float(fetched_at), entry["data"]
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError, KeyError, TypeError):
+            log.warning("Ignoring unreadable SEC cache file")
+            return None
+
+    def _disk_write(self, url: str, data: Any) -> None:
+        path = self._cache_path(url)
+        if path is None:
+            return
+        tmp_name = None
+        try:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(path.parent, 0o700)
+            payload = {"url": url, "fetched_at": self._wall_clock(), "data": data}
+            fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False)
+            os.replace(tmp_name, path)
+            tmp_name = None
+        except (OSError, TypeError, ValueError):
+            log.warning("Could not write SEC cache file")
+        finally:
+            if tmp_name:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+
+    def _fetch_json(self, url: str) -> Any:
         headers = {"User-Agent": self._user_agent, "Accept-Encoding": "gzip, deflate"}
         last_status: int | None = None
         for attempt in range(self._max_retries + 1):

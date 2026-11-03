@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}סיכום · {{ s.ticker }}{% endblock %}
+{% block page_class %}page-wide{% endblock %}
+
+{% macro source_panel(src) %}
+<div class="source" role="group" aria-label="מקור המספר">
+  <p class="source-title">{{ src.name_he }}</p>
+  {% if src.status != 'ok' %}<p class="source-status">{{ src.status_he }}</p>{% endif %}
+  <p class="source-label">נוסחה</p>
+  <p class="formula"><bdi dir="ltr">{{ src.formula }}</bdi></p>
+  {% if src.components %}
+  <p class="source-label">רכיבים <span class="muted">(מיליוני דולר)</span></p>
+  <ul class="components">
+    {% for c in src.components %}
+    <li>
+      <div class="comp-line">
+        <span class="comp-name">{{ c.name_he }} <bdi dir="ltr" class="tag">{{ c.tag }}</bdi></span>
+        <bdi dir="ltr" class="num comp-value">{{ c.value }}</bdi>
+      </div>
+      <div class="comp-meta">
+        תקופה:
+        {% if c.period.start %}<bdi dir="ltr" class="num">{{ c.period.start }}</bdi> עד <bdi dir="ltr" class="num">{{ c.period.end }}</bdi>{% else %}נכון ל-<bdi dir="ltr" class="num">{{ c.period.end }}</bdi>{% endif %}
+        · דוח <bdi dir="ltr" class="num">{{ c.form }}</bdi>
+        · הוגש <bdi dir="ltr" class="num">{{ c.filed or "—" }}</bdi>
+        <br>מספר accession: <bdi dir="ltr" class="num">{{ c.accession }}</bdi>
+        {% if c.url %}· <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">הדוח ב-SEC ↗</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if src.missing %}
+  <p class="source-label">חסר בדוח</p>
+  <ul class="missing">
+    {% for m in src.missing %}<li>{{ m }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro value_cell(cell) %}
+{% if cell.kind == 'none' %}
+<span class="muted">{{ cell.text }}</span>
+{% elif cell.source %}
+<details class="src" name="src">
+  <summary class="{{ 'val' if cell.ok else 'val status' }}" title="הצגת המקור">{% if cell.ok %}<bdi dir="ltr" class="num">{{ cell.text }}</bdi>{% else %}{{ cell.text }}{% endif %}</summary>
+  {{ source_panel(cell.source) }}
+</details>
+{% else %}
+<span class="status">{{ cell.text }}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro col_head(label, h) %}
+<th scope="col" class="col-val">{{ label }}
+  {% if h %}<span class="col-sub"><bdi dir="ltr" class="num">{{ h.form }}</bdi> · <bdi dir="ltr" class="num">{{ h.report_date or "—" }}</bdi></span>{% endif %}
+</th>
+{% endmacro %}
+
+{% block content %}
+<section class="panel summary-head">
+  <div class="summary-title">
+    <h1 class="company"><bdi dir="ltr">{{ s.company }}</bdi></h1>
+    <span class="tag tag-primary"><bdi dir="ltr">{{ s.ticker }}</bdi></span>
+  </div>
+  <dl class="facts facts-inline">
+    <div class="fact"><dt>סוג הדוח</dt><dd><bdi dir="ltr" class="num">{{ s.latest.form }}</bdi></dd></div>
+    <div class="fact"><dt>סוף התקופה</dt><dd><bdi dir="ltr" class="num">{{ s.latest.report_date or "—" }}</bdi></dd></div>
+    <div class="fact"><dt>תאריך הגשה</dt><dd><bdi dir="ltr" class="num">{{ s.latest.filing_date or "—" }}</bdi></dd></div>
+    <div class="fact"><dt>CIK</dt><dd><bdi dir="ltr" class="num">{{ "%010d"|format(s.cik) }}</bdi></dd></div>
+  </dl>
+  {% if s.latest.url %}
+  <a class="btn btn-small" href="{{ s.latest.url }}" target="_blank" rel="noopener noreferrer">הדוח באתר SEC ↗</a>
+  {% endif %}
+</section>
+
+{% if s.notice_he %}
+<div class="alert alert-notice" role="note"><p>{{ s.notice_he }}</p></div>
+{% endif %}
+
+<section class="panel ratios">
+  <div class="panel-head">
+    <h2>יחסים פיננסיים</h2>
+    <p class="legend">לחיצה על מספר מציגה את המקור שלו.
+      <span class="good">▲ ירוק: שינוי לטובה</span> ·
+      <span class="bad">▼ אדום: שינוי לרעה</span></p>
+  </div>
+  <table class="ratio-table">
+    <thead>
+      <tr>
+        <th scope="col" class="col-name">יחס</th>
+        {{ col_head("תקופה נוכחית", s.latest) }}
+        {% if s.previous %}{{ col_head("תקופה קודמת", s.previous) }}{% else %}<th scope="col" class="col-val">תקופה קודמת</th>{% endif %}
+        <th scope="col" class="col-change">שינוי</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in s.rows %}
+      <tr data-key="{{ r.key }}">
+        <th scope="row" class="name">
+          <span class="name-he">{{ r.name }}</span>
+          {% if r.period_he %}<span class="badge">{{ r.period_he }}</span>{% endif %}
+          {% if r.name_en %}<bdi dir="ltr" class="name-en">{{ r.name_en }}</bdi>{% endif %}
+          {% if r.note_he %}<span class="row-note">{{ r.note_he }}</span>{% endif %}
+        </th>
+        <td class="cell" data-label="תקופה נוכחית">{{ value_cell(r.current) }}</td>
+        <td class="cell" data-label="תקופה קודמת">{{ value_cell(r.previous) }}</td>
+        <td class="cell change {{ r.change.tone or 'none' }}" data-label="שינוי">
+          {% if r.change.tone %}
+          <bdi dir="ltr" class="num"><span class="arrow" aria-hidden="true">{{ r.change.arrow }}</span> {{ r.change.text }}</bdi>
+          <span class="sr-only">{{ r.change.tone_he }}</span>
+          {% else %}
+          <span class="muted">{{ r.change.text }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="table-foot">הסימן (+/-) מראה את כיוון המספר והצבע מראה אם השינוי לטובה. בחוב להון ירידה נחשבת לשינוי לטובה. כל החישובים בקוד, מתוך נתוני <bdi dir="ltr">XBRL</bdi> של SEC.</p>
+</section>
+{% endblock %}
