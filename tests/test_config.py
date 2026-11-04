@@ -39,3 +39,28 @@ def test_cache_dir_default_and_override(monkeypatch, tmp_path):
     assert get_sec_cache_dir() == tmp_path / "x"
     monkeypatch.setenv("SEC_CACHE_DIR", "   ")
     assert get_sec_cache_dir().parts[-2:] == (".cache", "sec")
+
+
+@pytest.mark.parametrize("raw, expected", [
+    (None, None), ("", None), ("   ", None), ("abc123", "abc123"), ('"abc123"', "abc123"), ("'abc123' ", "abc123"),
+])
+def test_optional_price_keys(monkeypatch, raw, expected):
+    from backend.config import get_finnhub_key, get_tiingo_key
+
+    for name, getter in (("FINNHUB_API_KEY", get_finnhub_key), ("TIINGO_API_KEY", get_tiingo_key)):
+        if raw is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, raw)
+        assert getter() == expected
+
+
+def test_price_cache_dir_default_and_override(monkeypatch, tmp_path):
+    from backend.config import get_price_cache_dir
+
+    monkeypatch.delenv("PRICE_CACHE_DIR", raising=False)
+    assert get_price_cache_dir().parts[-2:] == (".cache", "prices")
+    monkeypatch.setenv("PRICE_CACHE_DIR", str(tmp_path / "p"))
+    assert get_price_cache_dir() == tmp_path / "p"
+    monkeypatch.setenv("PRICE_CACHE_DIR", "  ")
+    assert get_price_cache_dir().parts[-2:] == (".cache", "prices")

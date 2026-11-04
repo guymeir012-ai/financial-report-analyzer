@@ -72,10 +72,12 @@ def make_facts(accession: str, rows: list[tuple]) -> dict[str, Any]:
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, data: Any = None, headers=None):
+    def __init__(self, status_code=200, data: Any = None, headers=None, content: bytes | None = None):
         self.status_code = status_code
         self._data = data
         self.headers = headers or {}
+        self.content = content if content is not None else (
+            json.dumps(data).encode("utf-8") if data is not None else b"")
 
     def json(self):
         if self._data is None:
