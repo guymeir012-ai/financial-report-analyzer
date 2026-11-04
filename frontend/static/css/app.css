@@ -226,6 +226,61 @@ p { margin: 0; }
 .missing li::before { content: "• "; }
 .table-foot { padding: 14px 28px 20px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--border-soft); }
 
+.source-note { margin-top: 12px; color: var(--text-dim); font-size: 12.5px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+.unit { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.fact-sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.fact .src summary { font-size: 16px; }
+/* KPI cards sit at the inline start of the row: open their panels towards the inline end */
+.val-kpis .source { inset-inline-end: auto; inset-inline-start: 0; }
+
+/* ---- valuation ---- */
+.valuation { margin-top: 20px; }
+.val-body { padding: 4px 28px 24px; }
+.val-kpis { margin: 8px 0 0; }
+.kpi dd { font-size: 20px; font-weight: 700; }
+.kpi dd .status { font-weight: 400; }
+.val-block { margin-top: 28px; }
+.val-block h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--text); }
+.val-sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+
+.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bar { display: grid; grid-template-columns: 220px 1fr 80px; align-items: center; gap: 14px; }
+.bar-label { font-size: 14px; color: var(--text-dim); }
+.bar-track { width: 100%; height: 10px; display: block; background: var(--surface-2); border-radius: 2px; }
+.bar-fill { fill: var(--muted); }
+.bar-company .bar-fill { fill: var(--primary-strong); }
+.bar-company .bar-label { color: var(--primary); font-weight: 700; }
+.bar-history .bar-fill { fill: #7a8794; }
+.bar-peers .bar-fill { fill: #5f6f7d; }
+.bar-leader .bar-fill { fill: #9a8cff; }
+.bar-value { font-size: 15px; font-weight: 500; text-align: end; }
+
+.chart-wrap { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 8px 6px 2px; }
+.history-chart { width: 100%; height: auto; display: block; font-family: var(--font-mono); }
+.history-chart .axis { stroke: var(--border); stroke-width: 1; }
+.history-chart .col { fill: var(--primary-strong); opacity: 0.85; }
+.history-chart .col-missing { fill: var(--surface-3); }
+.history-chart .median-line { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 4 4; }
+.history-chart .median-label { fill: var(--warn); font-size: 11px; }
+.history-chart .col-label { fill: var(--muted); font-size: 10px; }
+.points { margin-top: 10px; }
+.points > summary { cursor: pointer; color: var(--primary); font-size: 14px; }
+.points-table { margin-top: 8px; font-size: 14px; }
+.points-table th, .points-table td { padding: 8px 12px; }
+.points-table .cell, .points-table .cell .num { font-size: 14px; }
+
+.peers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.peer { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 10px 14px; display: grid; gap: 4px; }
+.peer-leader { border-color: #9a8cff; }
+.peer-ticker { display: flex; align-items: center; gap: 8px; }
+.peer-ticker .badge { margin: 0; color: #c5bcff; border-color: #9a8cff; }
+.peer-pe { font-size: 20px; font-weight: 700; }
+.peer-gap { color: var(--text-dim); font-size: 14px; }
+.peer-meta { color: var(--muted); font-size: 12px; }
+
+.explanation p { margin-top: 8px; color: var(--text); font-size: 15px; line-height: 1.7; }
+.val-warning { margin-top: 24px; }
+
 /* ---- narrow screens: rows become cards, panels open inline ---- */
 @media (max-width: 760px) {
   .page, .page-home, .page-narrow { padding: 20px 16px 40px; }
@@ -241,6 +296,10 @@ p { margin: 0; }
   .ratio-table th, .ratio-table td { padding: 4px 0; }
   .ratio-table td.cell { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .ratio-table td.cell::before { content: attr(data-label); color: var(--muted); font-size: 13px; }
+  .val-body { padding: 4px 20px 20px; }
+  .bar { grid-template-columns: 1fr; gap: 4px; }
+  .bar-value { text-align: start; }
+  .points-table thead { position: static; width: auto; height: auto; clip: auto; }
   .src { position: static; display: block; }
   .src summary { display: inline-block; }
   .source { position: static; width: auto; max-width: none; flex-basis: 100%; margin-top: 8px; }

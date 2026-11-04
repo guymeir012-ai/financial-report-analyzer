@@ -7,7 +7,9 @@ from backend import valuation as v
 from backend.filings import FilingFacts, filings_with_facts
 from backend.prices import PriceError
 from backend.ratios import load_company
-from tests.conftest import LATEST_ACCN, NVDA_CIK, PREVIOUS_ACCN, make_facts, make_filing
+from tests.conftest import (
+    CLOSES, LATEST_ACCN, PEER_METRICS, PREVIOUS_ACCN, QUOTE, StubFinnhub, StubTiingo, make_facts, make_filing,
+)
 
 TENK_ACCN = "0001045810-26-000021"
 ANNUAL_NI, ANNUAL_SHARES, REPORTED_EPS = 120_067e6, 24_514e6, 4.90
@@ -143,10 +145,6 @@ def test_pe_inherits_missing_eps(nvda_facts, nvda_filings):
 
 # ---- history ----
 
-CLOSES = [("2026-07-20", 203.28), ("2026-07-23", 208.76), ("2026-07-24", 206.84), ("2026-07-27", 196.51),
-          ("2026-04-24", 100.0), ("2026-01-23", 50.0)]
-
-
 @pytest.mark.parametrize("day, expected", [
     ("2026-07-24", ("2026-07-24", 206.84)),   # exact trading day
     ("2026-07-26", ("2026-07-24", 206.84)),   # Sunday -> Friday
@@ -210,42 +208,6 @@ def test_year_ago_point():
 
 # ---- peers ----
 
-class StubFinnhub:
-    def __init__(self, quote=None, peers=(), metrics=None, failing=(), peers_error=None, quote_error=None):
-        self._quote, self._peers, self._metrics = quote, list(peers), metrics or {}
-        self.failing, self.peers_error, self.quote_error = set(failing), peers_error, quote_error
-        self.calls = []
-
-    def quote(self, symbol):
-        self.calls.append(("quote", symbol))
-        if self.quote_error:
-            raise self.quote_error
-        return self._quote
-
-    def peers(self, symbol):
-        self.calls.append(("peers", symbol))
-        if self.peers_error:
-            raise self.peers_error
-        return {"peers": self._peers, "fetched_at": 1_800_000_000.0}
-
-    def metrics(self, symbol):
-        self.calls.append(("metrics", symbol))
-        if symbol in self.failing:
-            raise PriceError(status=503)
-        m = self._metrics.get(symbol, {"pe_ttm": None, "eps_ttm": None, "market_cap": None})
-        return {**m, "fetched_at": 1_800_000_000.0}
-
-
-PEER_METRICS = {
-    "AVGO": {"pe_ttm": 41.5, "eps_ttm": 7.8, "market_cap": 1_589_762},
-    "AMD": {"pe_ttm": 80.0, "eps_ttm": 2.0, "market_cap": 300_000},
-    "INTC": {"pe_ttm": None, "eps_ttm": -1.2, "market_cap": 150_000},
-    "MU": {"pe_ttm": 20.0, "eps_ttm": 5.0, "market_cap": 200_000},
-    "TXN": {"pe_ttm": 30.0, "eps_ttm": 5.0, "market_cap": 180_000},
-    "NVDA": {"pe_ttm": 25.8, "eps_ttm": 7.91, "market_cap": 4_981_229},
-}
-
-
 def test_peers_valuation_median_leaders_and_loss():
     fh = StubFinnhub(peers=["AVGO", "AMD", "INTC", "MU", "TXN", "ADI"], metrics=PEER_METRICS, failing={"ADI"})
     out = v.peers_valuation(fh, "NVDA")
@@ -276,20 +238,6 @@ def test_relative(value, bench, expected):
 
 
 # ---- explanation and orchestration ----
-
-QUOTE = {"price": 203.48, "previous_close": 206.69, "timestamp": 1793814988, "fetched_at": 1793820231.5}
-
-
-class StubTiingo:
-    def __init__(self, closes, error=None):
-        self._closes, self.error, self.calls = closes, error, []
-
-    def daily_closes(self, symbol, start):
-        self.calls.append((symbol, start))
-        if self.error:
-            raise self.error
-        return {"closes": self._closes, "fetched_at": 1_800_000_000.0}
-
 
 def loaded_nvda(nvda_client):
     return load_company("NVDA", nvda_client)

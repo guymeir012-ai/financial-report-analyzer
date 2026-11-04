@@ -334,3 +334,143 @@ def test_all_pages_have_no_recommendation_words(http):
     for path in ("/", "/confirm?ticker=NVDA", "/summary/NVDA", "/confirm?ticker=NVDX", "/nope"):
         html = text_of(http.get(path))
         assert not any(w in html for w in FORBIDDEN_WORDS), path
+
+
+# ---------- valuation ----------
+
+from backend.prices import PriceError  # noqa: E402
+from tests.conftest import CLOSES, PEER_METRICS, QUOTE, StubFinnhub, StubTiingo  # noqa: E402
+
+
+def valuation_app(nvda_client, finnhub=None, tiingo=None):
+    fh = finnhub if finnhub is not None else StubFinnhub(quote=QUOTE, peers=["AVGO", "AMD", "INTC", "MU", "TXN"], metrics=PEER_METRICS)
+    ti = tiingo if tiingo is not None else StubTiingo(CLOSES)
+    return create_app(nvda_client, finnhub=fh, tiingo=ti).test_client()
+
+
+def section(html: str) -> str:
+    return re.search(r'<section class="panel valuation".*?</section>', html, re.S).group(0)
+
+
+def test_header_shows_price_in_israel_time_and_pe(nvda_client):
+    html = text_of(valuation_app(nvda_client).get("/summary/NVDA"))
+    head = re.search(r'<section class="panel summary-head">.*?</section>', html, re.S).group(0)
+    assert "$203.48" in head and "04.11.2026 19:56" in head and "שעון ישראל" in head and "Finnhub" in head
+    assert "מכפיל רווח (P/E TTM)" in head and ">25.6x<" in head
+
+
+def test_valuation_section_values(nvda_client):
+    resp = valuation_app(nvda_client).get("/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200 and html.count('<tr data-key=') == 9
+    val = section(html)
+    assert 'data-status="ok"' in val
+    assert ">25.6x<" in val and ">$7.94<" in val                       # computed here, not Finnhub's 25.8
+    assert "חציון החברה" in val and "3 רבעונים" in val
+    assert "חציון המתחרות" in val and "4 חברות" in val and ">35.8x<" in val
+    assert '<svg class="bar-track"' in val and 'width="100.0"' in val
+    assert '<svg class="history-chart"' in val and 'class="median-line"' in val and val.count('class="col"') == 3
+    assert 'data-peer="AVGO"' in val and 'data-peer="INTC"' in val and "הפסד, אין מכפיל" in val
+    assert ">מובילה<" in val and val.count(">מובילה<") == 3
+    assert "פער <bdi dir=\"ltr\" class=\"num\">-38%</bdi>" in val      # company vs AVGO, sign only
+    assert "פרמיה" in val and "הנחה" in val and "זולה לא אומר ראויה להשקעה" in val
+    assert "change good" not in val and "change bad" not in val      # premium/discount carry no color
+    assert "SIC" in val and ">3674<" in val
+    assert_clean(resp)
+
+
+def test_valuation_source_panels(nvda_client):
+    val = section(text_of(valuation_app(nvda_client).get("/summary/NVDA")))
+    pe = re.search(r'data-kpi="pe">.*?</dd>', val, re.S).group(0)
+    assert "<details" in pe and "Finnhub" in pe and "quote" in pe and "04.11.2026 19:56" in pe and "שעון ישראל" in pe
+    assert "בדיקה צולבת: Finnhub מחשב מכפיל 25.8x" in pe and "price / EPS TTM" in pe
+    eps = re.search(r'data-kpi="eps">.*?</dd>', val, re.S).group(0)
+    for expected in ("WeightedAverageNumberOfDilutedSharesOutstanding", "מספר מניות בדילול", "24,285", "מיליוני מניות",
+                     "192,880" if False else "120,067", "118,010", "45,197", "ספקים אחרים", "0001045810-26-000075"):
+        assert expected in eps, expected
+    assert 'href="https://www.sec.gov/Archives/edgar/data/1045810/' in eps
+
+
+def test_valuation_history_points_table(nvda_client):
+    val = section(text_of(valuation_app(nvda_client).get("/summary/NVDA")))
+    points = re.search(r'<table class="ratio-table points-table">.*?</table>', val, re.S).group(0)
+    assert points.count("<tr>") == 4 and "26.07.2026" in points and "25.01.2026" in points
+    assert "206.84" in points and "24.07.2026" in points and "Tiingo" in points
+
+
+def test_valuation_unavailable_without_keys_keeps_ratios(nvda_client):
+    resp = create_app(nvda_client).test_client().get("/summary/NVDA")    # no keys in the test environment
+    html = text_of(resp)
+    assert resp.status_code == 200 and html.count('<tr data-key=') == 9
+    val = section(html)
+    assert 'data-status="unavailable"' in val and "לא זמין כרגע" in val
+    assert ">$7.94<" in val                                           # EPS needs only SEC data
+    assert "25.6x" not in html and "history-chart" not in val
+    assert_clean(resp)
+
+
+def test_valuation_provider_failure_keeps_page(nvda_client, caplog):
+    fh = StubFinnhub(quote_error=PriceError(status=429), peers_error=PriceError(status=503))
+    resp = valuation_app(nvda_client, finnhub=fh, tiingo=StubTiingo([], error=PriceError(status=404))).get("/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200 and html.count('<tr data-key=') == 9
+    val = section(html)
+    assert 'data-status="unavailable"' in val and val.count("לא זמין כרגע") >= 3
+    assert_clean(resp)
+
+
+def test_valuation_crash_never_breaks_the_page(nvda_client, caplog):
+    class Broken:
+        def quote(self, symbol):
+            raise RuntimeError("boom")
+
+    resp = valuation_app(nvda_client, finnhub=Broken()).get("/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200 and html.count('<tr data-key=') == 9
+    assert 'data-status="unavailable"' in section(html) and "boom" not in html
+    assert "Valuation failed" in caplog.text
+    assert_clean(resp)
+
+
+def test_valuation_loss_shows_no_multiple(nvda_submissions, nvda_facts, fake_time):
+    facts = copy.deepcopy(nvda_facts)
+    for fact in facts["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]:
+        fact["val"] = -abs(fact["val"])
+    client = make_client(nvda_submissions, facts)
+    html = text_of(valuation_app(client).get("/summary/NVDA"))
+    val = section(html)
+    assert "הפסד ב-12 החודשים האחרונים" in val and "לחברה הפסד" in val
+    assert re.search(r">\d+\.\dx<", re.search(r'data-kpi="pe">.*?</dd>', val, re.S).group(0)) is None
+    assert "history-chart" not in val                                  # no positive P/E point to draw
+
+
+def test_valuation_peer_names_are_escaped(nvda_client):
+    fh = StubFinnhub(quote=QUOTE, peers=["<b>X</b>", "AVGO"], metrics=PEER_METRICS)
+    html = text_of(valuation_app(nvda_client, finnhub=fh).get("/summary/NVDA"))
+    assert "<b>X</b>" not in html and "&lt;b&gt;X&lt;/b&gt;" in html
+
+
+def test_valuation_no_inline_styles_scripts_or_foreign_links(nvda_client):
+    html = text_of(valuation_app(nvda_client).get("/summary/NVDA"))
+    assert " style=" not in html and "<style" not in html and "<script" not in html.lower()
+    external = [u for u in SEC_LINK.findall(html) if u.startswith("http")]
+    assert external and all(u.startswith("https://www.sec.gov/") for u in external)
+
+
+def test_api_valuation_json(nvda_client):
+    http = valuation_app(nvda_client)
+    resp = http.get("/api/valuation/nvda")
+    body = resp.get_json()
+    assert resp.status_code == 200 and resp.mimetype == "application/json"
+    assert body["ticker"] == "NVDA" and body["current"]["pe"]["status"] == "ok"
+    assert body["peers"]["leaders"] == ["AVGO", "AMD", "MU"] and len(body["history"]["points"]) == 3
+    assert "\\u05" not in resp.get_data(as_text=True)
+    assert http.get("/api/valuation/NVDX").status_code == 404
+    assert http.get("/api/valuation/bad%20one").status_code == 400
+    headers = http.get("/api/valuation/NVDA").headers
+    assert headers["X-Content-Type-Options"] == "nosniff" and "script-src 'none'" in headers["Content-Security-Policy"]
+
+
+def test_api_valuation_without_keys_is_unavailable_not_an_error(nvda_client):
+    body = create_app(nvda_client).test_client().get("/api/valuation/NVDA").get_json()
+    assert body["current"]["status"] == "unavailable" and body["history"]["status"] == "unavailable"
