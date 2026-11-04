@@ -1,0 +1,27 @@
+<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}מנתח דוחות כספיים{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rubik:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span>מנתח דוחות כספיים</span>
+    </a>
+    <span class="topbar-tag"><bdi dir="ltr">SEC EDGAR // US EQUITIES</bdi></span>
+  </header>
+  <main class="page {% block page_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <span>המידע מבוסס על דוחות רשמיים של SEC ומיועד לאנליסטים בלבד. אינו מהווה ייעוץ השקעות.</span>
+  </footer>
+</body>
+</html>

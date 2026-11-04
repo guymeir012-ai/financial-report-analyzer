@@ -47,3 +47,17 @@ def test_analyze_nvda_latest_is_current(client):
     filing = result["latest"]["filing"]
     assert filing["form"] in ("10-Q", "10-K")
     assert filing["report_date"] >= "2026-07-26"
+
+
+def test_pages_render_live_nvda(client):
+    from backend.app import create_app
+
+    http = create_app(client).test_client()
+    confirm = http.get("/confirm?ticker=NVDA")
+    assert confirm.status_code == 200 and "NVIDIA" in confirm.get_data(as_text=True)
+    resp = http.get("/summary/NVDA")
+    html = resp.get_data(as_text=True)
+    assert resp.status_code == 200 and html.count("<tr data-key=") == 9
+    assert "תקופה נוכחית" in html and "https://www.sec.gov/" in html
+    assert not any(word in html for word in ("קנייה", "מכירה", "המלצ", "Buy", "Sell"))
+    assert http.get("/confirm?ticker=NVDX").status_code == 404

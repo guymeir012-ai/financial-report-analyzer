@@ -28,3 +28,14 @@ def test_error_does_not_leak_value(monkeypatch):
     with pytest.raises(ConfigError) as exc:
         get_sec_user_agent()
     assert "secret-name" not in str(exc.value)
+
+
+def test_cache_dir_default_and_override(monkeypatch, tmp_path):
+    from backend.config import get_sec_cache_dir
+
+    monkeypatch.delenv("SEC_CACHE_DIR", raising=False)
+    assert get_sec_cache_dir().parts[-2:] == (".cache", "sec")
+    monkeypatch.setenv("SEC_CACHE_DIR", str(tmp_path / "x"))
+    assert get_sec_cache_dir() == tmp_path / "x"
+    monkeypatch.setenv("SEC_CACHE_DIR", "   ")
+    assert get_sec_cache_dir().parts[-2:] == (".cache", "sec")

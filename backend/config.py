@@ -23,3 +23,11 @@ def get_sec_user_agent() -> str:
     if not any(_EMAIL_RE.match(token) for token in value.split()):
         raise ConfigError("SEC_EDGAR_USER_AGENT must contain a contact email")
     return value
+
+
+def get_sec_cache_dir() -> Path:
+    """Directory for the on-disk SEC response cache (SEC_CACHE_DIR, default <repo>/.cache/sec)."""
+    value = os.environ.get("SEC_CACHE_DIR", "").strip()
+    if value:
+        return Path(value).expanduser()
+    return Path(__file__).resolve().parent.parent / ".cache" / "sec"

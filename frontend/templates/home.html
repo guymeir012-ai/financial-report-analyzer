@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}מנתח דוחות כספיים{% endblock %}
+{% block page_class %}page-home{% endblock %}
+{% block content %}
+<section class="hero panel">
+  <p class="eyebrow"><bdi dir="ltr">10-Q / 10-K</bdi> · נתוני <bdi dir="ltr">XBRL</bdi> של SEC</p>
+  <h1>ניתוח דוחות כספיים לחברות אמריקאיות</h1>
+  <p class="lead">מקלידים סימול, מאשרים את החברה, ומקבלים יחסים פיננסיים בעברית, מה השתנה מהתקופה הקודמת ומקור לכל מספר.</p>
+
+  <form class="search" action="/confirm" method="get">
+    <label class="search-label" for="ticker">הקלידו סימול מניה אמריקאית</label>
+    <div class="search-row">
+      <input id="ticker" name="ticker" type="text" dir="ltr" class="ticker-input" maxlength="10"
+             autocomplete="off" autocapitalize="characters" spellcheck="false"
+             placeholder="NVDA" value="{{ ticker }}" autofocus>
+      <button type="submit" class="btn primary">המשך</button>
+    </div>
+    <p class="hint">למשל <bdi dir="ltr">NVDA</bdi>, <bdi dir="ltr">AAPL</bdi> או <bdi dir="ltr">BRK-B</bdi>. מניות הנסחרות ב-NYSE וב-NASDAQ.</p>
+  </form>
+
+  {% if message %}
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    {% if suggestions %}
+    <p class="suggest-title">האם התכוונת ל:</p>
+    <ul class="suggestions">
+      {% for s in suggestions %}
+      <li><a class="chip" href="{{ url_for('confirm', ticker=s.ticker) }}"><bdi dir="ltr" class="tag">{{ s.ticker }}</bdi> <bdi dir="ltr">{{ s.title }}</bdi></a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="examples">
+    <span class="examples-label">לדוגמה:</span>
+    {% for t in examples %}
+    <a class="chip" href="{{ url_for('confirm', ticker=t) }}"><bdi dir="ltr" class="tag">{{ t }}</bdi></a>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
