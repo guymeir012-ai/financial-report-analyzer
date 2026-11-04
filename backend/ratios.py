@@ -18,6 +18,9 @@ NAMES_HE = {
     "current_ratio": "יחס שוטף (Current Ratio)",
     "debt_to_equity": "חוב להון (Debt to Equity)",
     "equity_ratio": "הון למאזן (Equity Ratio)",
+    "eps_ttm": "רווח למניה, 12 חודשים אחרונים (EPS TTM)",
+    "eps_annual": "רווח למניה שנתי (EPS)",
+    "pe_ttm": "מכפיל רווח (P/E TTM)",
 }
 ITEMS_HE = {
     "revenue": "הכנסות",
@@ -34,14 +37,17 @@ ITEMS_HE = {
     "annual_net_income": "רווח נקי שנתי",
     "ytd_net_income": "רווח נקי מתחילת השנה",
     "prior_ytd_net_income": "רווח נקי מתחילת השנה הקודמת",
+    "diluted_shares": "מספר מניות בדילול",
+    "price": "מחיר המניה",
 }
 NOT_APPLICABLE_HE = "לא רלוונטי לבנקים"
 BANK_NOT_APPLICABLE = ("gross_margin", "operating_margin", "current_ratio", "debt_to_equity")
 LEASE_NOTE_HE = "החוב כולל התחייבויות חכירה מימונית (finance leases), כפי שדווחו בדוח."
 TTM_PERIOD_HE = "12 חודשים אחרונים"
+UNAVAILABLE_HE = "לא זמין כרגע"
 
 
-def _result(
+def make_result(
     key: str, status: str, formula: str, period_days: int | None = None,
     inputs: list[SourcedValue] | None = None, value: float | None = None,
     reason: str = "", missing: list[str] | None = None,
@@ -52,6 +58,7 @@ def _result(
         "not_reported": NOT_REPORTED_HE,
         "not_computable": f"לא ניתן לחישוב: {reason}",
         "not_applicable": NOT_APPLICABLE_HE,
+        "unavailable": UNAVAILABLE_HE,
     }[status]
     return {
         "key": key,
@@ -80,8 +87,8 @@ def _divide(
 ) -> dict[str, Any]:
     if denominator == 0 or (positive_only and denominator < 0):
         reason = f"{denominator_he} שלילי או אפס" if positive_only else f"{denominator_he} הוא אפס"
-        return _result(key, "not_computable", formula, period_days, inputs, reason=reason)
-    return _result(key, "ok", formula, period_days, inputs, value=numerator / denominator)
+        return make_result(key, "not_computable", formula, period_days, inputs, reason=reason)
+    return make_result(key, "ok", formula, period_days, inputs, value=numerator / denominator)
 
 
 def _missing(key: str, formula: str, period_days: int | None,
@@ -90,7 +97,7 @@ def _missing(key: str, formula: str, period_days: int | None,
     if not gone:
         return None
     present = [val for val in found.values() if val is not None]
-    return _result(key, "not_reported", formula, period_days, present, missing=gone)
+    return make_result(key, "not_reported", formula, period_days, present, missing=gone)
 
 
 def _growth(key: str, formula: str, current: SourcedValue | None, base: SourcedValue | None,
@@ -102,9 +109,9 @@ def _growth(key: str, formula: str, current: SourcedValue | None, base: SourcedV
     assert current and base
     inputs = [current, base]
     if base.value <= 0:
-        return _result(key, "not_computable", formula, period, inputs,
+        return make_result(key, "not_computable", formula, period, inputs,
                        reason=f"{base_label} אינן חיוביות")
-    return _result(key, "ok", formula, period, inputs, value=current.value / base.value - 1)
+    return make_result(key, "ok", formula, period, inputs, value=current.value / base.value - 1)
 
 
 def compute_ratios(
@@ -184,34 +191,44 @@ def compute_ratios(
                            positive_only=True))
     if is_bank:
         out = [
-            _result(r["key"], "not_applicable", r["formula"]) if r["key"] in BANK_NOT_APPLICABLE else r
+            make_result(r["key"], "not_applicable", r["formula"]) if r["key"] in BANK_NOT_APPLICABLE else r
             for r in out
         ]
     return out
 
 
-def _roe(ff: FilingFacts, equity: SourcedValue | None) -> dict[str, Any]:
-    """Return on equity over trailing twelve months, divided by period-end equity."""
-    parts = ff.ttm_net_income()
-    eq_name = equity.concept if equity else "StockholdersEquity"
+def ttm_net_income(ff: FilingFacts, tags: tuple[str, ...] = f.NET_INCOME_TAGS,
+                   ) -> tuple[str, dict[str, SourcedValue | None], float | None]:
+    """(numerator formula, labelled components, TTM net income or None when a part is missing)."""
+    parts = ff.ttm_net_income(tags)
     concept = next((p.concept for p in parts.values() if p), "NetIncomeLoss")
     if "ytd" in parts:
-        formula = f"({concept} annual + {concept} YTD - {concept} prior-year YTD) / {eq_name}"
+        formula = f"({concept} annual + {concept} YTD - {concept} prior-year YTD)"
         labels = {"annual": "annual_net_income", "ytd": "ytd_net_income",
                   "prior_ytd": "prior_ytd_net_income"}
     else:
-        formula = f"{concept} annual / {eq_name}"
+        formula = f"{concept} annual"
         labels = {"annual": "annual_net_income"}
     found = {labels[k]: v for k, v in parts.items()}
+    if not all(found.values()):
+        return formula, found, None
+    ttm = parts["annual"].value
+    if "ytd" in parts:
+        ttm += parts["ytd"].value - parts["prior_ytd"].value
+    return formula, found, ttm
+
+
+def _roe(ff: FilingFacts, equity: SourcedValue | None) -> dict[str, Any]:
+    """Return on equity over trailing twelve months, divided by period-end equity."""
+    numerator, found, ttm = ttm_net_income(ff)
+    eq_name = equity.concept if equity else "StockholdersEquity"
+    formula = f"{numerator} / {eq_name}"
     found["equity"] = equity
     inputs = [v for v in found.values() if v is not None]
     gone = [ITEMS_HE[n] for n, v in found.items() if v is None]
     if gone:
-        return _result("roe", "not_reported", formula, None, inputs, missing=gone,
-                       period_he=TTM_PERIOD_HE)
-    ttm = parts["annual"].value
-    if "ytd" in parts:
-        ttm += parts["ytd"].value - parts["prior_ytd"].value
+        return make_result("roe", "not_reported", formula, None, inputs, missing=gone,
+                           period_he=TTM_PERIOD_HE)
     res = _divide("roe", formula, ttm, equity.value, inputs, None, "ההון העצמי", positive_only=True)
     res["period_he"] = TTM_PERIOD_HE
     return res
@@ -224,7 +241,7 @@ def _margin(key: str, formula: str, period: int | None, revenue: SourcedValue | 
         inputs.append(revenue)
     missing = [ITEMS_HE[n] for n, v in ((profit_name, profit), ("revenue", revenue)) if v is None]
     if missing:
-        return _result(key, "not_reported", formula, period, inputs, missing=missing)
+        return make_result(key, "not_reported", formula, period, inputs, missing=missing)
     return _divide(key, formula, profit, revenue.value, inputs, period, "ההכנסות")
 
 
@@ -248,9 +265,9 @@ def _growth_vs_previous(
     period = _days(revenue)
     inputs = [revenue] if revenue else []
     if previous_filing is None:
-        return _result(key, "not_computable", formula, period, inputs, reason="אין דוח קודם להשוואה")
+        return make_result(key, "not_computable", formula, period, inputs, reason="אין דוח קודם להשוואה")
     if previous_filing.form != filing.form:
-        return _result(
+        return make_result(
             key, "not_computable", formula, period, inputs,
             reason=f"אורכי התקופות שונים ({previous_filing.form} מול {filing.form})",
         )
@@ -258,9 +275,21 @@ def _growth_vs_previous(
     return _growth(key, formula, revenue, previous, "revenue_previous_filing", "ההכנסות בדוח הקודם")
 
 
-def analyze(ticker: str, client: SecClient) -> dict[str, Any]:
+def load_company(ticker: str, client: SecClient) -> dict[str, Any]:
+    """Everything one analysis needs from SEC: identity, periodic filings and the XBRL facts."""
     ticker, cik, title, periodic, sic = f.find_company_filings(client, ticker)
-    facts_json = client.company_facts(cik)
+    return {
+        "ticker": ticker, "cik": cik, "company": title, "periodic": periodic, "sic": sic,
+        "facts_json": client.company_facts(cik),
+    }
+
+
+def analyze(ticker: str, client: SecClient, loaded: dict[str, Any] | None = None) -> dict[str, Any]:
+    loaded = loaded or load_company(ticker, client)
+    ticker, cik, title, periodic, sic = (
+        loaded["ticker"], loaded["cik"], loaded["company"], loaded["periodic"], loaded["sic"],
+    )
+    facts_json = loaded["facts_json"]
     available = f.filings_with_facts(facts_json, periodic)
     notice_he: str | None = None
     if available:

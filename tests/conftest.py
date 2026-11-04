@@ -59,15 +59,15 @@ def make_filing(form="10-Q", accession="0000000001-26-000001", report_date="2026
 
 
 def make_facts(accession: str, rows: list[tuple]) -> dict[str, Any]:
-    """rows: (tag, start|None, end, value[, accn, form]); builds a minimal companyfacts document."""
+    """rows: (tag, start|None, end, value[, accn, form, unit]); builds a minimal companyfacts document."""
     gaap: dict[str, Any] = {}
     for tag, start, end, val, *extra in rows:
-        accn, form = (extra + [None, None])[:2]
+        accn, form, unit = (extra + [None, None, None])[:3]
         fact = {"end": end, "val": val, "accn": accn or accession, "form": form or "10-Q",
                 "filed": "2026-08-01"}
         if start:
             fact["start"] = start
-        gaap.setdefault(tag, {"units": {"USD": []}})["units"]["USD"].append(fact)
+        gaap.setdefault(tag, {"units": {}})["units"].setdefault(unit or "USD", []).append(fact)
     return {"cik": 1, "entityName": "TEST", "facts": {"us-gaap": gaap}}
 
 

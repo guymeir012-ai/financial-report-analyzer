@@ -22,6 +22,11 @@ GROSS_PROFIT_TAGS = ("GrossProfit",)
 COST_TAGS = ("CostOfRevenue", "CostOfGoodsAndServicesSold")
 OPERATING_INCOME_TAGS = ("OperatingIncomeLoss",)
 NET_INCOME_TAGS = ("NetIncomeLoss", "ProfitLoss")
+# Earnings per share start from the income that belongs to common shareholders (after preferred dividends).
+EPS_NUMERATOR_TAGS = (
+    "NetIncomeLossAvailableToCommonStockholdersDiluted",
+    "NetIncomeLossAvailableToCommonStockholdersBasic",
+) + NET_INCOME_TAGS
 EQUITY_TAGS = (
     "StockholdersEquity",
     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
@@ -37,6 +42,10 @@ DEBT_LEASE_INCL_CURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligationsIncluding
 DEBT_LEASE_NONCURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligations",)
 DEBT_LEASE_CURRENT_TAGS = ("LongTermDebtAndCapitalLeaseObligationsCurrent",)
 NOTES_AND_LOANS_TAGS = ("NotesAndLoansPayable",)
+DILUTED_SHARES_TAGS = ("WeightedAverageNumberOfDilutedSharesOutstanding",)
+EPS_DILUTED_TAGS = ("EarningsPerShareDiluted",)
+SHARES_UNIT = "shares"
+EPS_UNIT = "USD/shares"
 BANK_SICS = frozenset({"6021", "6022", "6029", "6035", "6036"})
 
 ALL_TAGS = (
@@ -145,9 +154,9 @@ class FilingFacts:
         self.report_date = self._resolve_report_date()
         self.band = PERIOD_BANDS[filing.form]
 
-    def _entries(self, tag: str) -> Iterable[dict[str, Any]]:
+    def _entries(self, tag: str, unit: str = "USD") -> Iterable[dict[str, Any]]:
         units = (self._gaap.get(tag) or {}).get("units") or {}
-        for fact in units.get("USD") or []:
+        for fact in units.get(unit) or []:
             if fact.get("accn") == self.filing.accession and _is_number(fact.get("val")):
                 yield fact
 
@@ -162,26 +171,26 @@ class FilingFacts:
         ]
         return max(ends) if ends else None
 
-    def _sourced(self, tag: str, fact: dict[str, Any]) -> SourcedValue:
+    def _sourced(self, tag: str, fact: dict[str, Any], unit: str = "USD") -> SourcedValue:
         accession = fact.get("accn") or self.filing.accession
         # Facts borrowed from another filing link to that filing's folder.
         url = (self.filing.url if accession == self.filing.accession
                else filing_url(self.filing.cik, accession, ""))
         return SourcedValue(
-            concept=tag, value=fact["val"], unit="USD", start=fact.get("start"),
+            concept=tag, value=fact["val"], unit=unit, start=fact.get("start"),
             end=fact["end"], accession=accession,
             form=fact.get("form") or self.filing.form, filed=fact.get("filed") or "", url=url,
         )
 
-    def _pick(self, tags: Iterable[str], accept) -> SourcedValue | None:
+    def _pick(self, tags: Iterable[str], accept, unit: str = "USD") -> SourcedValue | None:
         for tag in tags:
-            matches = [f for f in self._entries(tag) if accept(f)]
+            matches = [f for f in self._entries(tag, unit) if accept(f)]
             if matches:
                 best = max(matches, key=lambda f: f.get("filed") or "")
-                return self._sourced(tag, best)
+                return self._sourced(tag, best, unit)
         return None
 
-    def duration(self, tags: Iterable[str], prior_year: bool = False) -> SourcedValue | None:
+    def duration(self, tags: Iterable[str], prior_year: bool = False, unit: str = "USD") -> SourcedValue | None:
         """Income-statement item for the filing's period, or its prior-year comparative."""
         if self.report_date is None:
             return None
@@ -194,16 +203,38 @@ class FilingFacts:
             gap = (self.report_date - end).days
             return PRIOR_YEAR_GAP[0] <= gap <= PRIOR_YEAR_GAP[1] if prior_year else gap == 0
 
-        return self._pick(tags, accept)
+        return self._pick(tags, accept, unit)
 
-    def instant(self, tags: Iterable[str]) -> SourcedValue | None:
+    def instant(self, tags: Iterable[str], unit: str = "USD") -> SourcedValue | None:
         """Balance-sheet item at the report date."""
         if self.report_date is None:
             return None
         return self._pick(
             tags,
             lambda f: not f.get("start") and _parse_date(f.get("end")) == self.report_date,
+            unit,
         )
+
+    def diluted_shares(self) -> SourcedValue | None:
+        """Diluted weighted-average shares for the latest quarter (10-Q) or the year (10-K)."""
+        if self.report_date is None:
+            return None
+        low, high = PERIOD_BANDS[self.filing.form]
+        for tag in DILUTED_SHARES_TAGS:
+            matches = []
+            for fact in self._entries(tag, SHARES_UNIT):
+                start, end = _parse_date(fact.get("start")), _parse_date(fact.get("end"))
+                if start and end == self.report_date and low <= (end - start).days <= high:
+                    matches.append(((end - start).days, fact.get("filed") or "", fact))
+            if matches:
+                # shortest period wins; among equals the most recently filed
+                matches.sort(key=lambda m: (m[0], m[1]))
+                return self._sourced(tag, matches[0][2], SHARES_UNIT)
+        return None
+
+    def reported_eps(self) -> SourcedValue | None:
+        """Diluted EPS as reported for the filing's own period (cross-check only)."""
+        return self.duration(EPS_DILUTED_TAGS, unit=EPS_UNIT)
 
     def debt(self) -> tuple[list[SourcedValue], str, bool] | None:
         """Debt components, a formula, and whether finance leases are included."""
@@ -229,22 +260,22 @@ class FilingFacts:
             parts.append(borrowings)
         return parts, " + ".join(p.concept for p in parts), lease
 
-    def _all_usd(self, tag: str) -> Iterable[dict[str, Any]]:
+    def _all_units(self, tag: str, unit: str = "USD") -> Iterable[dict[str, Any]]:
         units = (self._gaap.get(tag) or {}).get("units") or {}
-        return [x for x in units.get("USD") or [] if _is_number(x.get("val"))]
+        return [x for x in units.get(unit) or [] if _is_number(x.get("val"))]
 
-    def ttm_net_income(self) -> dict[str, SourcedValue | None]:
+    def ttm_net_income(self, tags: Iterable[str] = NET_INCOME_TAGS) -> dict[str, SourcedValue | None]:
         """Components of trailing-twelve-month net income (one concept for all parts).
 
         10-K: {"annual"}. 10-Q: {"annual", "ytd", "prior_ytd"}; TTM = annual + ytd - prior_ytd.
         """
         if self.filing.form == "10-K":
-            return {"annual": self.duration(NET_INCOME_TAGS)}
+            return {"annual": self.duration(tags)}
         empty: dict[str, SourcedValue | None] = {"annual": None, "ytd": None, "prior_ytd": None}
         if self.report_date is None:
             return empty
         best = empty
-        for tag in NET_INCOME_TAGS:
+        for tag in tags:
             parts = self._ttm_parts(tag)
             if all(parts.values()):
                 return parts
@@ -281,7 +312,7 @@ class FilingFacts:
             parts["prior_ytd"] = self._sourced(tag, max(prior, key=lambda x: x.get("filed") or ""))
 
         annual = [
-            x for x in self._all_usd(tag) if x.get("form") == "10-K" and (se := span(x))
+            x for x in self._all_units(tag) if x.get("form") == "10-K" and (se := span(x))
             and PERIOD_BANDS["10-K"][0] <= (se[1] - se[0]).days <= PERIOD_BANDS["10-K"][1]
             and 0 <= (ytd_start - se[1]).days <= 7
         ]
