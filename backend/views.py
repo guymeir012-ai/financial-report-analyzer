@@ -1,18 +1,26 @@
 """Pure view-model helpers: turn `analyze()` output into what the templates display."""
 import math
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from backend import filings as f
-from backend.ratios import ITEMS_HE
+from backend.ratios import ITEMS_HE, UNAVAILABLE_HE
+from backend.valuation import relative
 
 PERCENT_KEYS = frozenset({
     "revenue_growth_yoy", "revenue_growth_qoq", "gross_margin", "operating_margin",
     "net_margin", "roe", "equity_ratio",
 })
-MULTIPLE_KEYS = frozenset({"current_ratio", "debt_to_equity"})
+MULTIPLE_KEYS = frozenset({"current_ratio", "debt_to_equity", "pe_ttm"})
+ONE_DECIMAL_KEYS = frozenset({"pe_ttm"})
+DOLLAR_KEYS = frozenset({"eps_ttm", "eps_annual"})
 LOWER_IS_BETTER = frozenset({"debt_to_equity"})
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+ISRAEL_CLOCK_HE = "שעון ישראל"
+UNITS_HE = {"USD": "מיליוני דולר", "shares": "מיליוני מניות", "USD/shares": "דולר למניה"}
+HISTORY_CHART = {"width": 640, "height": 170, "top": 14, "bottom": 30, "side": 20}
 
 SEC_PREFIX = "https://www.sec.gov/"
 NO_PREVIOUS_HE = "אין דוח קודם"
@@ -40,6 +48,10 @@ TAG_NAMES_HE: dict[str, str] = {
     **{t: "חוב והתחייבויות חכירה, כולל חלק שוטף" for t in f.DEBT_LEASE_INCL_CURRENT_TAGS},
     **{t: "חוב והתחייבויות חכירה, חלק לא שוטף" for t in f.DEBT_LEASE_NONCURRENT_TAGS},
     **{t: "חוב והתחייבויות חכירה, חלק שוטף" for t in f.DEBT_LEASE_CURRENT_TAGS},
+    **{t: ITEMS_HE["diluted_shares"] for t in f.DILUTED_SHARES_TAGS},
+    **{t: "רווח למניה בדילול, כפי שדווח" for t in f.EPS_DILUTED_TAGS},
+    "NetIncomeLossAvailableToCommonStockholdersDiluted": "רווח נקי לבעלי המניות הרגילות (בדילול)",
+    "NetIncomeLossAvailableToCommonStockholdersBasic": "רווח נקי לבעלי המניות הרגילות",
 }
 
 
@@ -48,14 +60,52 @@ def _finite(value: Any) -> bool:
 
 
 def format_value(key: str, value: float | None) -> str:
-    """Percent with one decimal, or a multiple with two decimals and an x."""
+    """Percent with one decimal, dollars with two, or a multiple with an x (one decimal for P/E)."""
     if not _finite(value):
         return NO_CHANGE
     if key in PERCENT_KEYS:
         text = f"{value * 100:,.1f}"
         return ("0.0" if float(text.replace(",", "")) == 0 else text) + "%"
-    text = f"{value:,.2f}"
-    return ("0.00" if float(text.replace(",", "")) == 0 else text) + "x"
+    if key in DOLLAR_KEYS:
+        text = f"{abs(value):,.2f}"
+        return ("-" if value < 0 and float(text.replace(",", "")) != 0 else "") + "$" + text
+    places = 1 if key in ONE_DECIMAL_KEYS else 2
+    text = f"{value:,.{places}f}"
+    return (f"{0:.{places}f}" if float(text.replace(",", "")) == 0 else text) + "x"
+
+
+def format_price(value: float | None) -> str:
+    return f"{value:,.2f}" if _finite(value) else NO_CHANGE
+
+
+def format_signed_percent(value: float | None) -> str:
+    """+38% / -12% / 0% for a relative difference; no color, only the sign."""
+    if not _finite(value):
+        return NO_CHANGE
+    rounded = round(value * 100)
+    return f"{rounded:+d}%" if rounded else "0%"
+
+
+def format_israel_time(iso_utc: str | None) -> str:
+    """ISO timestamp (any zone) to DD.MM.YYYY HH:MM in Israel's clock."""
+    if not iso_utc:
+        return ""
+    try:
+        moment = datetime.fromisoformat(iso_utc)
+    except ValueError:
+        return iso_utc
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(ISRAEL_TZ).strftime("%d.%m.%Y %H:%M")
+
+
+def format_as_of(as_of: str | None) -> tuple[str, str]:
+    """(text, label): a plain date stays a date; a timestamp becomes Israel time with its label."""
+    if not as_of:
+        return "", ""
+    if len(as_of) == 10:
+        return format_date(as_of), ""
+    return format_israel_time(as_of), ISRAEL_CLOCK_HE
 
 
 def compute_change(key: str, current: float | None, previous: float | None) -> dict[str, Any]:
@@ -142,31 +192,60 @@ def _period_text(inp: dict[str, Any]) -> dict[str, str]:
     return {"start": format_date(start) if start else "", "end": format_date(end)}
 
 
+def _xbrl_value(inp: dict[str, Any]) -> tuple[str, str]:
+    value, unit = inp.get("value"), inp.get("unit") or "USD"
+    if not _finite(value):
+        return NO_CHANGE, UNITS_HE.get(unit, unit)
+    if unit == "USD/shares":
+        return f"{value:,.2f}", UNITS_HE[unit]
+    return format_millions(value), UNITS_HE.get(unit, unit)
+
+
+def _component(key: str, inp: dict[str, Any], report_date: str) -> dict[str, Any]:
+    kind = inp.get("kind") or "xbrl"
+    if kind == "provider":
+        as_of, label = format_as_of(inp.get("as_of"))
+        return {
+            "kind": "provider", "name_he": inp.get("name_he", ""), "provider": inp.get("provider", ""),
+            "endpoint": inp.get("endpoint", ""), "value": format_price(inp.get("value")),
+            "unit_he": "דולר", "as_of": as_of, "as_of_label": label,
+        }
+    if kind == "derived":
+        value = inp.get("value")
+        return {
+            "kind": "derived", "name_he": inp.get("name_he", ""),
+            "value": format_value("eps_ttm", value) if _finite(value) else NO_CHANGE,
+            "unit_he": "", "status_he": isolate_forms(inp.get("status_he", "")),
+        }
+    value, unit_he = _xbrl_value(inp)
+    return {
+        "kind": "xbrl",
+        "name_he": _component_name(key, inp, report_date),
+        "tag": inp.get("concept", ""),
+        "value": value,
+        "unit_he": unit_he,
+        "period": _period_text(inp),
+        "form": inp.get("form", ""),
+        "accession": inp.get("accession", ""),
+        "filed": format_date(inp.get("filed")),
+        "url": safe_sec_url(inp.get("url")),
+    }
+
+
 def build_source(ratio: dict[str, Any], report_date: str) -> dict[str, Any] | None:
     """Content of the source panel, or None when there is nothing to show."""
     inputs, missing = ratio.get("inputs") or [], ratio.get("missing") or []
     if not inputs and not missing:
         return None
-    components = []
-    for inp in inputs:
-        value = inp.get("value")
-        components.append({
-            "name_he": _component_name(ratio["key"], inp, report_date),
-            "tag": inp.get("concept", ""),
-            "value": format_millions(value) if _finite(value) else NO_CHANGE,
-            "period": _period_text(inp),
-            "form": inp.get("form", ""),
-            "accession": inp.get("accession", ""),
-            "filed": format_date(inp.get("filed")),
-            "url": safe_sec_url(inp.get("url")),
-        })
     return {
         "name_he": split_name(ratio["name_he"])[0],
         "formula": ratio.get("formula", ""),
         "status": ratio.get("status"),
         "status_he": isolate_forms(ratio.get("status_he", "")),
-        "components": components,
+        "note_he": ratio.get("note_he"),
+        "components": [_component(ratio["key"], inp, report_date) for inp in inputs],
         "missing": list(missing),
+        "extra_he": [],
     }
 
 
@@ -229,4 +308,152 @@ def build_summary(analysis: dict[str, Any]) -> dict[str, Any]:
         "latest": filing_header(latest_filing),
         "previous": filing_header(previous_filing),
         "rows": rows,
+    }
+
+
+# ---- valuation ----
+
+def _unavailable_cell() -> dict[str, Any]:
+    return {"kind": "status", "ok": False, "text": UNAVAILABLE_HE, "source": None}
+
+
+def _bar(label: str, sub: str, value: float | None, kind: str) -> dict[str, Any]:
+    return {"label": label, "sub": sub, "value": value, "text": format_value("pe_ttm", value) if _finite(value) else sub or NO_CHANGE,
+            "kind": kind, "width": 0.0}
+
+
+def _scale_bars(bars: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    top = max((b["value"] for b in bars if _finite(b["value"]) and b["value"] > 0), default=None)
+    for b in bars:
+        b["width"] = round(b["value"] / top * 100, 1) if top and _finite(b["value"]) and b["value"] > 0 else 0.0
+    return bars
+
+
+def _history_chart(points: list[dict[str, Any]], median: float | None) -> dict[str, Any] | None:
+    """Geometry of the quarterly P/E column chart (oldest on the left), numbers only."""
+    ordered = list(reversed(points))
+    values = [p["value"] for p in ordered if _finite(p.get("value")) and p["value"] > 0]
+    if not values:
+        return None
+    width, height = HISTORY_CHART["width"], HISTORY_CHART["height"]
+    top, bottom, side = HISTORY_CHART["top"], HISTORY_CHART["bottom"], HISTORY_CHART["side"]
+    span = max(values + ([median] if _finite(median) else []))
+    plot_h = height - top - bottom
+    inner = width - 2 * side
+    slot = inner / len(ordered)
+    bar_w = round(slot * 0.62, 1)
+
+    def y_of(value: float) -> float:
+        return round(top + plot_h - value / span * plot_h, 1)
+
+    columns = []
+    for i, p in enumerate(ordered):
+        x = round(side + i * slot + (slot - bar_w) / 2, 1)
+        value = p.get("value") if _finite(p.get("value")) and p["value"] > 0 else None
+        label = ""
+        try:
+            label = date.fromisoformat(p["report_date"]).strftime("%m/%y")
+        except (TypeError, ValueError):
+            pass
+        columns.append({
+            "x": x, "w": bar_w, "y": y_of(value) if value else top + plot_h, "h": round(plot_h - (y_of(value) - top), 1) if value else 0,
+            "label": label, "label_x": round(x + bar_w / 2, 1), "text": format_value("pe_ttm", value) if value else NO_CHANGE,
+            "missing": value is None,
+        })
+    return {
+        "width": width, "height": height, "columns": columns, "baseline_y": top + plot_h,
+        "label_y": height - 10, "median_y": y_of(median) if _finite(median) else None,
+        "median_text": format_value("pe_ttm", median) if _finite(median) else "",
+        "show_labels": len(ordered) <= 12,
+    }
+
+
+def build_valuation_view(val: dict[str, Any] | None, report_date: str) -> dict[str, Any]:
+    """View model of the valuation section; `val` is `build_valuation()` output or None."""
+    if val is None:
+        return {"status": "unavailable", "status_he": UNAVAILABLE_HE, "price": None,
+                "pe": _unavailable_cell(), "eps": _unavailable_cell(), "cross_check": None,
+                "history": {"status": "unavailable", "status_he": UNAVAILABLE_HE, "points": [], "chart": None,
+                            "summary": {"count": 0, "median": NO_CHANGE, "mean": NO_CHANGE, "from": "", "to": ""}},
+                "peers": {"status": "unavailable", "status_he": UNAVAILABLE_HE, "rows": [], "count": 0,
+                          "median": NO_CHANGE, "leaders": []},
+                "bars": [], "explanation": [UNAVAILABLE_HE], "sic": None}
+    current = val["current"]
+    price = current.get("price")
+    price_view = None
+    if price:
+        as_of, label = format_as_of(price.get("as_of"))
+        price_view = {"text": format_price(price.get("value")), "as_of": as_of, "as_of_label": label,
+                      "provider": price.get("provider", "")}
+    pe_cell = build_cell("pe_ttm", current["pe"], report_date)
+    eps_cell = build_cell("eps_ttm", current["eps"], report_date)
+    cross = current.get("cross_check")
+    cross_view = None
+    if cross and (_finite(cross.get("pe_ttm")) or _finite(cross.get("eps_ttm"))):
+        as_of, label = format_as_of(cross.get("as_of"))
+        cross_view = {"provider": cross.get("provider", ""), "pe": format_value("pe_ttm", cross.get("pe_ttm")),
+                      "eps": format_value("eps_ttm", cross.get("eps_ttm")), "as_of": as_of, "as_of_label": label}
+        if pe_cell["source"]:
+            pe_cell["source"]["extra_he"].append(
+                f"בדיקה צולבת: {cross_view['provider']} מחשב מכפיל {cross_view['pe']} ורווח למניה {cross_view['eps']}, "
+                f"נכון ל-{as_of} {label}".strip() + ".")
+
+    history = val["history"]
+    summary = history.get("summary") or {}
+    points = []
+    for p in history.get("points") or []:
+        price_p = p.get("price")
+        points.append({
+            "report_date": format_date(p.get("report_date")), "form": p.get("form", ""),
+            "pe": build_cell("pe_ttm", p["pe"], p.get("report_date") or ""),
+            "eps": build_cell("eps_ttm", p["eps"], p.get("report_date") or ""),
+            "price": format_price(price_p["value"]) if price_p else NO_CHANGE,
+            "price_date": format_date(price_p["as_of"]) if price_p else "",
+            "url": safe_sec_url(p.get("url")),
+        })
+    history_view = {
+        "status": history.get("status"), "status_he": history.get("status_he") or "",
+        "points": points,
+        "summary": {"count": summary.get("count", 0), "median": format_value("pe_ttm", summary.get("median")),
+                    "mean": format_value("pe_ttm", summary.get("mean")),
+                    "from": format_date(summary.get("from")), "to": format_date(summary.get("to"))},
+        "chart": _history_chart(history.get("points") or [], summary.get("median")),
+    }
+
+    peers = val["peers"]
+    company_pe = current["pe"]["value"] if current["pe"].get("status") == "ok" else None
+    rows = []
+    for e in peers.get("peers") or []:
+        as_of, label = format_as_of(e.get("as_of"))
+        status_he = {"ok": "", "loss": "הפסד, אין מכפיל", "unavailable": UNAVAILABLE_HE, "no_data": "לא דווח"}.get(e.get("status"), "")
+        rows.append({
+            "ticker": e.get("ticker", ""), "status": e.get("status"), "status_he": status_he,
+            "pe": format_value("pe_ttm", e.get("pe")) if _finite(e.get("pe")) else status_he or NO_CHANGE,
+            "gap": format_signed_percent(relative(company_pe, e.get("pe"))),
+            "market_cap": (f"{e['market_cap'] / 1000:,.0f}" if _finite(e.get("market_cap")) else NO_CHANGE),
+            "leader": e.get("ticker") in (peers.get("leaders") or []),
+            "as_of": as_of, "as_of_label": label,
+        })
+    peers_view = {
+        "status": peers.get("status"), "status_he": peers.get("status_he") or "",
+        "rows": rows, "count": peers.get("count", 0), "median": format_value("pe_ttm", peers.get("median")),
+        "median_gap": format_signed_percent(relative(company_pe, peers.get("median"))),
+        "leaders": list(peers.get("leaders") or []), "fetched_at": format_as_of(peers.get("fetched_at"))[0],
+    }
+
+    bars = [_bar("החברה היום", "" if company_pe else current["pe"].get("status_he", UNAVAILABLE_HE), company_pe, "company")]
+    if history.get("status") == "ok":
+        bars.append(_bar(f"חציון החברה, {summary.get('count', 0)} רבעונים", "", summary.get("median"), "history"))
+    if peers.get("status") == "ok":
+        bars.append(_bar(f"חציון המתחרות, {peers.get('count', 0)} חברות", "", peers.get("median"), "peers"))
+        by_ticker = {e["ticker"]: e for e in peers.get("peers") or []}
+        for leader in peers.get("leaders") or []:
+            e = by_ticker.get(leader) or {}
+            bars.append(_bar(leader, "הפסד" if e.get("status") == "loss" else "", e.get("pe"), "leader"))
+    return {
+        "status": current.get("status"), "status_he": current.get("status_he") or "",
+        "price": price_view, "pe": pe_cell, "eps": eps_cell, "cross_check": cross_view,
+        "history": history_view, "peers": peers_view, "bars": _scale_bars(bars),
+        "explanation": [isolate_forms(s) for s in val.get("explanation_he") or []],
+        "sic": val.get("sic"),
     }

@@ -25,9 +25,33 @@ def get_sec_user_agent() -> str:
     return value
 
 
-def get_sec_cache_dir() -> Path:
-    """Directory for the on-disk SEC response cache (SEC_CACHE_DIR, default <repo>/.cache/sec)."""
-    value = os.environ.get("SEC_CACHE_DIR", "").strip()
+def _optional(name: str) -> str | None:
+    value = os.environ.get(name, "").strip().strip('"').strip("'").strip()
+    return value or None
+
+
+def get_finnhub_key() -> str | None:
+    """FINNHUB_API_KEY, or None when not configured (valuation is then shown as unavailable)."""
+    return _optional("FINNHUB_API_KEY")
+
+
+def get_tiingo_key() -> str | None:
+    """TIINGO_API_KEY, or None when not configured."""
+    return _optional("TIINGO_API_KEY")
+
+
+def _cache_dir(env_name: str, default: str) -> Path:
+    value = os.environ.get(env_name, "").strip()
     if value:
         return Path(value).expanduser()
-    return Path(__file__).resolve().parent.parent / ".cache" / "sec"
+    return Path(__file__).resolve().parent.parent / ".cache" / default
+
+
+def get_sec_cache_dir() -> Path:
+    """Directory for the on-disk SEC response cache (SEC_CACHE_DIR, default <repo>/.cache/sec)."""
+    return _cache_dir("SEC_CACHE_DIR", "sec")
+
+
+def get_price_cache_dir() -> Path:
+    """Directory for the on-disk price cache (PRICE_CACHE_DIR, default <repo>/.cache/prices)."""
+    return _cache_dir("PRICE_CACHE_DIR", "prices")

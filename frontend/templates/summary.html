@@ -9,13 +9,29 @@
   <p class="source-label">נוסחה</p>
   <p class="formula"><bdi dir="ltr">{{ src.formula }}</bdi></p>
   {% if src.components %}
-  <p class="source-label">רכיבים <span class="muted">(מיליוני דולר)</span></p>
+  <p class="source-label">רכיבים</p>
   <ul class="components">
     {% for c in src.components %}
     <li>
+      {% if c.kind == 'provider' %}
+      <div class="comp-line">
+        <span class="comp-name">{{ c.name_he }} <bdi dir="ltr" class="tag">{{ c.provider }}</bdi></span>
+        <span class="comp-value"><bdi dir="ltr" class="num">{{ c.value }}</bdi> <span class="unit">{{ c.unit_he }}</span></span>
+      </div>
+      <div class="comp-meta">
+        נכון ל-<bdi dir="ltr" class="num">{{ c.as_of }}</bdi>{% if c.as_of_label %} {{ c.as_of_label }}{% endif %}
+        · מקור: {{ c.provider }}, <bdi dir="ltr">{{ c.endpoint }}</bdi>
+      </div>
+      {% elif c.kind == 'derived' %}
+      <div class="comp-line">
+        <span class="comp-name">{{ c.name_he }}</span>
+        <span class="comp-value"><bdi dir="ltr" class="num">{{ c.value }}</bdi></span>
+      </div>
+      <div class="comp-meta">{% if c.status_he %}{{ c.status_he }} · {% endif %}מחושב בקוד מנתוני SEC. המקור המלא בכרטיס הרווח למניה.</div>
+      {% else %}
       <div class="comp-line">
         <span class="comp-name">{{ c.name_he }} <bdi dir="ltr" class="tag">{{ c.tag }}</bdi></span>
-        <bdi dir="ltr" class="num comp-value">{{ c.value }}</bdi>
+        <span class="comp-value"><bdi dir="ltr" class="num">{{ c.value }}</bdi> <span class="unit">{{ c.unit_he }}</span></span>
       </div>
       <div class="comp-meta">
         תקופה:
@@ -25,6 +41,7 @@
         <br>מספר accession: <bdi dir="ltr" class="num">{{ c.accession }}</bdi>
         {% if c.url %}· <a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">הדוח ב-SEC ↗</a>{% endif %}
       </div>
+      {% endif %}
     </li>
     {% endfor %}
   </ul>
@@ -35,6 +52,8 @@
     {% for m in src.missing %}<li>{{ m }}</li>{% endfor %}
   </ul>
   {% endif %}
+  {% if src.note_he %}<p class="source-note">{{ src.note_he }}</p>{% endif %}
+  {% for line in src.extra_he %}<p class="source-note">{{ line }}</p>{% endfor %}
 </div>
 {% endmacro %}
 
@@ -68,6 +87,12 @@
     <div class="fact"><dt>סוף התקופה</dt><dd><bdi dir="ltr" class="num">{{ s.latest.report_date or "—" }}</bdi></dd></div>
     <div class="fact"><dt>תאריך הגשה</dt><dd><bdi dir="ltr" class="num">{{ s.latest.filing_date or "—" }}</bdi></dd></div>
     <div class="fact"><dt>CIK</dt><dd><bdi dir="ltr" class="num">{{ "%010d"|format(s.cik) }}</bdi></dd></div>
+    <div class="fact fact-price"><dt>מחיר המניה</dt>
+      <dd>{% if v.price %}<bdi dir="ltr" class="num">${{ v.price.text }}</bdi>
+        <span class="fact-sub"><bdi dir="ltr" class="num">{{ v.price.as_of }}</bdi>{% if v.price.as_of_label %} {{ v.price.as_of_label }}{% endif %} · {{ v.price.provider }}</span>
+      {% else %}<span class="status">{{ v.status_he or "לא זמין כרגע" }}</span>{% endif %}</dd>
+    </div>
+    <div class="fact fact-pe"><dt>מכפיל רווח (P/E TTM)</dt><dd>{{ value_cell(v.pe) }}</dd></div>
   </dl>
   {% if s.latest.url %}
   <a class="btn btn-small" href="{{ s.latest.url }}" target="_blank" rel="noopener noreferrer">הדוח באתר SEC ↗</a>
@@ -118,5 +143,107 @@
     </tbody>
   </table>
   <p class="table-foot">הסימן (+/-) מראה את כיוון המספר והצבע מראה אם השינוי לטובה. בחוב להון ירידה נחשבת לשינוי לטובה. כל החישובים בקוד, מתוך נתוני <bdi dir="ltr">XBRL</bdi> של SEC.</p>
+</section>
+
+<section class="panel valuation" id="valuation" data-status="{{ v.status }}">
+  <div class="panel-head">
+    <h2>תמחור</h2>
+    <p class="legend">מכפיל רווח (P/E TTM) = מחיר המניה חלקי הרווח למניה ב-12 החודשים האחרונים. לחיצה על מספר מציגה את המקור שלו.</p>
+  </div>
+  <div class="val-body">
+    <dl class="facts val-kpis">
+      <div class="fact kpi" data-kpi="pe"><dt>מכפיל רווח היום</dt><dd>{{ value_cell(v.pe) }}</dd></div>
+      <div class="fact kpi" data-kpi="eps"><dt>רווח למניה, 12 חודשים</dt><dd>{{ value_cell(v.eps) }}</dd></div>
+      <div class="fact kpi" data-kpi="history"><dt>חציון החברה</dt>
+        <dd>{% if v.history.status == 'ok' and v.history.summary.count %}<bdi dir="ltr" class="num">{{ v.history.summary.median }}</bdi>
+          <span class="fact-sub">{{ v.history.summary.count }} רבעונים, <bdi dir="ltr" class="num">{{ v.history.summary.from }}</bdi> עד <bdi dir="ltr" class="num">{{ v.history.summary.to }}</bdi></span>
+        {% else %}<span class="status">{{ v.history.status_he or "אין נתונים" }}</span>{% endif %}</dd>
+      </div>
+      <div class="fact kpi" data-kpi="peers"><dt>חציון המתחרות</dt>
+        <dd>{% if v.peers.status == 'ok' and v.peers.count %}<bdi dir="ltr" class="num">{{ v.peers.median }}</bdi>
+          <span class="fact-sub">{{ v.peers.count }} חברות · פער החברה <bdi dir="ltr" class="num">{{ v.peers.median_gap }}</bdi></span>
+        {% elif v.peers.status == 'empty' %}<span class="status">לא נמצאו מתחרות</span>
+        {% else %}<span class="status">{{ v.peers.status_he or "לא זמין כרגע" }}</span>{% endif %}</dd>
+      </div>
+      {% if v.sic %}<div class="fact kpi"><dt>ענף לפי SEC (SIC)</dt><dd><bdi dir="ltr" class="num">{{ v.sic }}</bdi></dd></div>{% endif %}
+    </dl>
+
+    <div class="val-block">
+      <h3>המכפיל מול ההיסטוריה והמתחרות</h3>
+      {% if v.bars %}
+      <ul class="bars">
+        {% for b in v.bars %}
+        <li class="bar bar-{{ b.kind }}">
+          <span class="bar-label">{% if b.kind == 'leader' %}<bdi dir="ltr" class="tag">{{ b.label }}</bdi>{% else %}{{ b.label }}{% endif %}</span>
+          <svg class="bar-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-fill" x="0" y="0" width="{{ b.width }}" height="8" rx="1"></rect></svg>
+          <span class="bar-value">{% if b.width %}<bdi dir="ltr" class="num">{{ b.text }}</bdi>{% else %}<span class="status">{{ b.text }}</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="status">{{ v.status_he or "לא זמין כרגע" }}</p>{% endif %}
+    </div>
+
+    <div class="val-block" data-block="history">
+      <h3>מכפיל הרווח בסוף כל רבעון</h3>
+      {% if v.history.status == 'ok' and v.history.chart %}
+      <p class="val-sub">מחיר הסגירה בסוף כל תקופת דוח חלקי הרווח למניה של 12 החודשים שהסתיימו אז. חציון <bdi dir="ltr" class="num">{{ v.history.summary.median }}</bdi>, ממוצע <bdi dir="ltr" class="num">{{ v.history.summary.mean }}</bdi>.</p>
+      {% set ch = v.history.chart %}
+      <div class="chart-wrap" dir="ltr">
+        <svg class="history-chart" viewBox="0 0 {{ ch.width }} {{ ch.height }}" role="img" aria-label="מכפיל הרווח לפי רבעון">
+          <line class="axis" x1="0" y1="{{ ch.baseline_y }}" x2="{{ ch.width }}" y2="{{ ch.baseline_y }}"></line>
+          {% if ch.median_y is not none %}
+          <line class="median-line" x1="0" y1="{{ ch.median_y }}" x2="{{ ch.width }}" y2="{{ ch.median_y }}"></line>
+          <text class="median-label" x="{{ ch.width - 4 }}" y="{{ ch.median_y - 4 }}" text-anchor="end">{{ ch.median_text }}</text>
+          {% endif %}
+          {% for c in ch.columns %}
+          <rect class="col{% if c.missing %} col-missing{% endif %}" x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.h }}"><title>{{ c.label }}: {{ c.text }}</title></rect>
+          {% if ch.show_labels or loop.first or loop.last %}<text class="col-label" x="{{ c.label_x }}" y="{{ ch.label_y }}" text-anchor="middle">{{ c.label }}</text>{% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+      <details class="points">
+        <summary>כל הנקודות עם המקורות</summary>
+        <table class="ratio-table points-table">
+          <thead><tr><th scope="col">סוף התקופה</th><th scope="col">מכפיל רווח</th><th scope="col">מחיר סגירה</th><th scope="col">רווח למניה, 12 חודשים</th></tr></thead>
+          <tbody>
+            {% for p in v.history.points %}
+            <tr>
+              <th scope="row" class="name"><bdi dir="ltr" class="num">{{ p.report_date }}</bdi> <bdi dir="ltr" class="name-en">{{ p.form }}</bdi>{% if p.url %} <a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">↗</a>{% endif %}</th>
+              <td class="cell" data-label="מכפיל רווח">{{ value_cell(p.pe) }}</td>
+              <td class="cell" data-label="מחיר סגירה"><bdi dir="ltr" class="num">{{ p.price }}</bdi>{% if p.price_date %} <span class="muted"><bdi dir="ltr" class="num">{{ p.price_date }}</bdi></span>{% endif %}</td>
+              <td class="cell" data-label="רווח למניה">{{ value_cell(p.eps) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% else %}<p class="status">{{ v.history.status_he or "אין נתונים להיסטוריה" }}</p>{% endif %}
+    </div>
+
+    <div class="val-block" data-block="peers">
+      <h3>מתחרות</h3>
+      {% if v.peers.status == 'ok' %}
+      <p class="val-sub">המכפילים של המתחרות מחושבים אצל Finnhub. פער = מכפיל החברה מול המתחרה, פלוס = החברה יקרה יותר.</p>
+      <ul class="peers">
+        {% for r in v.peers.rows %}
+        <li class="peer{% if r.leader %} peer-leader{% endif %}" data-peer="{{ r.ticker }}">
+          <span class="peer-ticker"><bdi dir="ltr" class="tag">{{ r.ticker }}</bdi>{% if r.leader %}<span class="badge">מובילה</span>{% endif %}</span>
+          <span class="peer-pe">{% if r.status == 'ok' %}<bdi dir="ltr" class="num">{{ r.pe }}</bdi>{% else %}<span class="status">{{ r.status_he }}</span>{% endif %}</span>
+          <span class="peer-gap">פער <bdi dir="ltr" class="num">{{ r.gap }}</bdi></span>
+          <span class="peer-meta">שווי שוק <bdi dir="ltr" class="num">{{ r.market_cap }}</bdi> מיליארד דולר · Finnhub <bdi dir="ltr" class="num">{{ r.as_of }}</bdi>{% if r.as_of_label %} {{ r.as_of_label }}{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% elif v.peers.status == 'empty' %}<p class="status">לא נמצאו מתחרות.</p>
+      {% else %}<p class="status">{{ v.peers.status_he or "לא זמין כרגע" }}</p>{% endif %}
+    </div>
+
+    <div class="val-block explanation">
+      <h3>מה המספרים אומרים</h3>
+      {% for line in v.explanation %}<p>{{ line }}</p>{% endfor %}
+    </div>
+
+    <div class="alert alert-notice val-warning" role="note"><p><strong>זולה לא אומר ראויה להשקעה.</strong> המכפיל מתאר מה השוק משלם על כל דולר רווח, לא את איכות החברה ולא את הסיכון שלה.</p></div>
+  </div>
 </section>
 {% endblock %}

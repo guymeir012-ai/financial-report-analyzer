@@ -8,12 +8,17 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
 from backend import filings as f
-from backend.config import ConfigError, get_sec_cache_dir, get_sec_user_agent
-from backend.ratios import analyze
+from backend.config import (
+    ConfigError, get_finnhub_key, get_price_cache_dir, get_sec_cache_dir, get_sec_user_agent,
+    get_tiingo_key,
+)
+from backend.prices import FinnhubClient, TiingoClient
+from backend.ratios import analyze, load_company
 from backend.sec_client import (
     InvalidTicker, SecClient, SecError, TickerNotFound,
 )
-from backend.views import build_summary, filing_header
+from backend.valuation import build_valuation
+from backend.views import build_summary, build_valuation_view, filing_header
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +35,7 @@ EMPTY_TICKER_HE = "יש להזין סימול."
 NOT_FOUND_TICKER_HE = "לא נמצאה חברה עם הסימול הזה."
 NO_FILINGS_HE = "לא נמצאו דוחות תקופתיים (10-Q או 10-K) לחברה הזו."
 UPSTREAM_HE = "לא ניתן לקבל נתונים מ-SEC כרגע. נסו שוב בעוד מספר דקות."
+UPSTREAM_VALUATION_HE = "נתוני התמחור אינם זמינים כרגע."
 PAGE_TITLES_HE = {
     404: "הדף לא נמצא",
     405: "הפעולה אינה נתמכת",
@@ -49,7 +55,11 @@ SECURITY_HEADERS = {
 }
 
 
-def create_app(client: SecClient | None = None) -> Flask:
+_UNSET: Any = object()
+
+
+def create_app(client: SecClient | None = None, finnhub: Any = _UNSET, tiingo: Any = _UNSET) -> Flask:
+    """`finnhub` / `tiingo`: a client, None (not configured), or unset = built from .env on first use."""
     app = Flask(
         __name__,
         template_folder=str(FRONTEND_DIR / "templates"),
@@ -59,7 +69,7 @@ def create_app(client: SecClient | None = None) -> Flask:
     app.json.sort_keys = False
     app.jinja_env.trim_blocks = True
     app.jinja_env.lstrip_blocks = True
-    holder: dict[str, SecClient] = {}
+    holder: dict[str, Any] = {}
     lock = threading.Lock()
 
     def get_client() -> SecClient:
@@ -69,6 +79,34 @@ def create_app(client: SecClient | None = None) -> Flask:
             if "client" not in holder:
                 holder["client"] = SecClient(get_sec_user_agent(), cache_dir=get_sec_cache_dir())
             return holder["client"]
+
+    def get_price_clients() -> tuple[Any, Any]:
+        with lock:
+            if "finnhub" not in holder:
+                if finnhub is not _UNSET:
+                    holder["finnhub"] = finnhub
+                else:
+                    key = get_finnhub_key()
+                    holder["finnhub"] = FinnhubClient(key, cache_dir=get_price_cache_dir()) if key else None
+                    if not key:
+                        log.warning("FINNHUB_API_KEY is not set; valuation will be shown as unavailable")
+                if tiingo is not _UNSET:
+                    holder["tiingo"] = tiingo
+                else:
+                    key = get_tiingo_key()
+                    holder["tiingo"] = TiingoClient(key, cache_dir=get_price_cache_dir()) if key else None
+                    if not key:
+                        log.warning("TIINGO_API_KEY is not set; P/E history will be shown as unavailable")
+            return holder["finnhub"], holder["tiingo"]
+
+    def valuation_for(loaded: dict[str, Any]) -> dict[str, Any] | None:
+        """Never lets a valuation problem take the ratios page down."""
+        try:
+            fh, ti = get_price_clients()
+            return build_valuation(loaded, fh, ti)
+        except Exception:  # noqa: BLE001 - logged, the section shows "unavailable"
+            log.exception("Valuation failed")
+            return None
 
     def is_api() -> bool:
         return request.path.startswith("/api/")
@@ -113,7 +151,11 @@ def create_app(client: SecClient | None = None) -> Flask:
 
     @app.get("/summary/<ticker>")
     def summary(ticker: str):
-        return render_template("summary.html", s=build_summary(analyze(ticker, get_client())))
+        loaded = load_company(ticker, get_client())
+        analysis = analyze(ticker, get_client(), loaded)
+        s = build_summary(analysis)
+        v = build_valuation_view(valuation_for(loaded), analysis["latest"]["filing"].get("report_date", ""))
+        return render_template("summary.html", s=s, v=v)
 
     # ---- JSON API ----
 
@@ -136,6 +178,14 @@ def create_app(client: SecClient | None = None) -> Flask:
     @app.get("/api/ratios/<ticker>")
     def ratios(ticker: str):
         return jsonify(analyze(ticker, get_client()))
+
+    @app.get("/api/valuation/<ticker>")
+    def valuation(ticker: str):
+        loaded = load_company(ticker, get_client())
+        result = valuation_for(loaded)
+        if result is None:
+            return error(UPSTREAM_VALUATION_HE, 502)
+        return jsonify(result)
 
     # ---- errors: JSON under /api/, Hebrew HTML elsewhere (never internals) ----
 

@@ -138,3 +138,136 @@ def test_roe_components_are_labelled_by_period():
                                         inp("2026-01-26", "2026-07-26"), inp("2025-01-27", "2025-07-27")])
     names = [c["name_he"] for c in views.build_source(ratio, "2026-07-26")["components"]]
     assert names == ["רווח נקי שנתי", "רווח נקי מתחילת השנה", "רווח נקי מתחילת השנה הקודמת"]
+
+
+# ---- valuation formatting and view ----
+
+from backend.views import (  # noqa: E402
+    build_source, build_valuation_view, format_as_of, format_israel_time, format_signed_percent,
+)
+
+
+@pytest.mark.parametrize("key, value, text", [
+    ("pe_ttm", 25.66, "25.7x"), ("pe_ttm", 123.456, "123.5x"), ("pe_ttm", 0.04, "0.0x"), ("pe_ttm", None, "—"),
+    ("eps_ttm", 7.9424, "$7.94"), ("eps_ttm", -2.056, "-$2.06"), ("eps_ttm", 1234.5, "$1,234.50"), ("eps_ttm", -0.001, "$0.00"),
+    ("eps_annual", 4.8979, "$4.90"),
+])
+def test_format_value_valuation_keys(key, value, text):
+    assert format_value(key, value) == text
+
+
+@pytest.mark.parametrize("value, text", [
+    (0.384, "+38%"), (-0.384, "-38%"), (0.004, "0%"), (0.0, "0%"), (None, "—"), (float("nan"), "—"), (1.37, "+137%"),
+])
+def test_format_signed_percent(value, text):
+    assert format_signed_percent(value) == text
+
+
+def test_format_israel_time():
+    assert format_israel_time("2026-11-04T17:56:28+00:00") == "04.11.2026 19:56"   # winter: UTC+2
+    assert format_israel_time("2026-07-24T13:30:00+00:00") == "24.07.2026 16:30"   # summer: UTC+3
+    assert format_israel_time("2026-11-04T17:56:28") == "04.11.2026 19:56"         # naive = UTC
+    assert format_israel_time(None) == "" and format_israel_time("garbage") == "garbage"
+
+
+def test_format_as_of_date_versus_timestamp():
+    assert format_as_of("2026-07-24") == ("24.07.2026", "")
+    assert format_as_of("2026-11-04T17:56:28+00:00") == ("04.11.2026 19:56", "שעון ישראל")
+    assert format_as_of(None) == ("", "")
+
+
+def test_build_source_provider_derived_and_units():
+    ratio = {
+        "key": "pe_ttm", "name_he": "מכפיל רווח (P/E TTM)", "formula": "price / EPS TTM", "status": "ok",
+        "status_he": "חושב", "note_he": None, "missing": [],
+        "inputs": [
+            {"kind": "provider", "name_he": "מחיר המניה", "provider": "Finnhub", "endpoint": "quote",
+             "value": 203.48, "unit": "USD", "as_of": "2026-11-04T17:56:28+00:00"},
+            {"kind": "derived", "name_he": "רווח למניה", "value": 7.9424, "status": "ok", "status_he": "חושב", "unit": "USD"},
+            {"concept": "WeightedAverageNumberOfDilutedSharesOutstanding", "value": 24_285e6, "unit": "shares",
+             "start": "2026-04-27", "end": "2026-07-26", "accession": "a", "form": "10-Q", "filed": "2026-08-26",
+             "url": "https://www.sec.gov/x"},
+            {"concept": "EarningsPerShareDiluted", "value": 4.9, "unit": "USD/shares", "start": "2025-01-27",
+             "end": "2026-01-25", "accession": "b", "form": "10-K", "filed": "2026-02-25", "url": "https://www.sec.gov/y"},
+        ],
+    }
+    src = build_source(ratio, "2026-07-26")
+    provider, derived, shares, eps = src["components"]
+    assert provider == {"kind": "provider", "name_he": "מחיר המניה", "provider": "Finnhub", "endpoint": "quote",
+                        "value": "203.48", "unit_he": "דולר", "as_of": "04.11.2026 19:56", "as_of_label": "שעון ישראל"}
+    assert derived["kind"] == "derived" and derived["value"] == "$7.94"
+    assert shares["name_he"] == "מספר מניות בדילול" and shares["value"] == "24,285" and shares["unit_he"] == "מיליוני מניות"
+    assert eps["value"] == "4.90" and eps["unit_he"] == "דולר למניה" and eps["name_he"] == "רווח למניה בדילול, כפי שדווח"
+    assert src["extra_he"] == []
+
+
+def _ratio_ok(key, value, inputs=None):
+    return {"key": key, "name_he": {"pe_ttm": "מכפיל רווח (P/E TTM)", "eps_ttm": "רווח למניה (EPS TTM)"}[key],
+            "value": value, "status": "ok", "status_he": "חושב", "formula": "f", "inputs": inputs or [], "missing": [],
+            "note_he": None, "period_he": None}
+
+
+def _point(day, pe, price=None):
+    return {"report_date": day, "form": "10-Q", "accession": "a", "filed": day, "url": "https://www.sec.gov/x",
+            "eps": _ratio_ok("eps_ttm", 8.0), "price": price, "pe": _ratio_ok("pe_ttm", pe), "value": pe}
+
+
+def _valuation(pe=25.0, history_median=50.0, peers_status="ok"):
+    pts = [_point("2026-07-26", pe, {"kind": "provider", "value": 200.0, "as_of": "2026-07-24"}),
+           _point("2026-04-26", history_median), _point("2026-01-25", None)]
+    return {
+        "ticker": "NVDA", "company": "NVIDIA", "sic": "3674",
+        "current": {"status": "ok", "status_he": "", "filing": None,
+                    "eps": _ratio_ok("eps_ttm", 8.0), "price": {"kind": "provider", "value": 200.0, "provider": "Finnhub",
+                                                              "as_of": "2026-11-04T17:56:28+00:00"},
+                    "pe": _ratio_ok("pe_ttm", pe, inputs=[{"kind": "provider", "name_he": "מחיר", "provider": "Finnhub",
+                                                           "endpoint": "quote", "value": 200.0, "as_of": "2026-11-04T17:56:28+00:00"}]),
+                    "cross_check": {"provider": "Finnhub", "pe_ttm": 25.8, "eps_ttm": 7.91, "market_cap": 1.0,
+                                    "as_of": "2026-11-04T18:00:00+00:00"}},
+        "history": {"status": "ok", "status_he": "", "points": pts,
+                    "summary": {"count": 2, "median": history_median, "mean": history_median, "from": "2026-04-26", "to": "2026-07-26"}},
+        "peers": {"status": peers_status, "status_he": "", "count": 2, "median": 40.0, "mean": 40.0, "leaders": ["AVGO", "INTC"],
+                  "peers": [{"ticker": "AVGO", "status": "ok", "pe": 50.0, "eps_ttm": 1.0, "market_cap": 1_589_762, "as_of": "2026-11-04T18:00:00+00:00"},
+                            {"ticker": "INTC", "status": "loss", "pe": None, "eps_ttm": -1.0, "market_cap": 150_000, "as_of": None},
+                            {"ticker": "MU", "status": "ok", "pe": 20.0, "eps_ttm": 1.0, "market_cap": None, "as_of": None}],
+                  "fetched_at": "2026-11-04T18:00:00+00:00"},
+        "explanation_he": ["משפט אחד.", "דוח 10-Q מוזכר."],
+    }
+
+
+def test_build_valuation_view_bars_chart_peers_and_cross_check():
+    v = build_valuation_view(_valuation(), "2026-07-26")
+    assert v["status"] == "ok" and v["price"] == {"text": "200.00", "as_of": "04.11.2026 19:56", "as_of_label": "שעון ישראל", "provider": "Finnhub"}
+    assert v["pe"]["text"] == "25.0x" and v["eps"]["text"] == "$8.00"
+    assert v["pe"]["source"]["extra_he"] == ["בדיקה צולבת: Finnhub מחשב מכפיל 25.8x ורווח למניה $7.91, נכון ל-04.11.2026 20:00 שעון ישראל."]
+    labels = [(b["label"], b["width"], b["text"]) for b in v["bars"]]
+    assert labels == [("החברה היום", 50.0, "25.0x"), ("חציון החברה, 2 רבעונים", 100.0, "50.0x"),
+                      ("חציון המתחרות, 2 חברות", 80.0, "40.0x"), ("AVGO", 100.0, "50.0x"), ("INTC", 0.0, "הפסד")]
+    chart = v["history"]["chart"]
+    assert chart and len(chart["columns"]) == 3 and chart["columns"][0]["label"] == "01/26" and chart["columns"][0]["missing"]
+    assert chart["columns"][1]["h"] > chart["columns"][2]["h"] > 0 and chart["median_text"] == "50.0x"
+    assert chart["columns"][1]["h"] == pytest.approx(chart["baseline_y"] - chart["median_y"], abs=0.2)
+    assert v["history"]["summary"] == {"count": 2, "median": "50.0x", "mean": "50.0x", "from": "26.04.2026", "to": "26.07.2026"}
+    assert v["history"]["points"][0]["price"] == "200.00" and v["history"]["points"][0]["price_date"] == "24.07.2026"
+    assert v["history"]["points"][1]["price"] == "—"
+    rows = {r["ticker"]: r for r in v["peers"]["rows"]}
+    assert rows["AVGO"]["gap"] == "-50%" and rows["AVGO"]["leader"] and rows["AVGO"]["market_cap"] == "1,590"
+    assert rows["MU"]["gap"] == "+25%" and not rows["MU"]["leader"] and rows["MU"]["market_cap"] == "—"
+    assert rows["INTC"]["pe"] == "הפסד, אין מכפיל" and rows["INTC"]["gap"] == "—"
+    assert v["peers"]["median_gap"] == "-38%" and v["peers"]["median"] == "40.0x"
+    assert v["explanation"][1] == "דוח ⁦10-Q⁩ מוזכר." and v["sic"] == "3674"
+
+
+def test_build_valuation_view_none_and_partial():
+    none = build_valuation_view(None, "2026-07-26")
+    assert none["status"] == "unavailable" and none["pe"]["text"] == "לא זמין כרגע" and none["bars"] == []
+    assert none["history"]["chart"] is None and none["peers"]["rows"] == []
+    partial = _valuation(peers_status="unavailable")
+    partial["current"]["pe"] = {**_ratio_ok("pe_ttm", None), "status": "unavailable", "status_he": "לא זמין כרגע", "value": None}
+    partial["current"]["price"] = None
+    partial["current"]["cross_check"] = None
+    v = build_valuation_view(partial, "2026-07-26")
+    assert v["price"] is None and v["pe"]["text"] == "לא זמין כרגע"
+    assert [b["label"] for b in v["bars"]] == ["החברה היום", "חציון החברה, 2 רבעונים"]
+    assert v["bars"][0]["width"] == 0.0 and v["bars"][0]["text"] == "לא זמין כרגע"
+    assert v["peers"]["median_gap"] == "—"

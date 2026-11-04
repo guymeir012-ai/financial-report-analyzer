@@ -9,7 +9,9 @@ from werkzeug.serving import make_server  # noqa: E402
 from backend import sec_client  # noqa: E402
 from backend.app import create_app  # noqa: E402
 from backend.sec_client import SecClient  # noqa: E402
-from tests.conftest import NVDA_CIK, TEST_UA, TICKERS, FakeResponse, FakeSession  # noqa: E402
+from tests.conftest import (  # noqa: E402
+    CLOSES, NVDA_CIK, PEER_METRICS, QUOTE, TEST_UA, TICKERS, FakeResponse, FakeSession, StubFinnhub, StubTiingo,
+)
 
 
 @pytest.fixture(scope="module")
@@ -19,7 +21,8 @@ def base_url(nvda_facts, nvda_submissions):
         sec_client.SUBMISSIONS_URL.format(cik=NVDA_CIK): FakeResponse(200, nvda_submissions),
         sec_client.COMPANY_FACTS_URL.format(cik=NVDA_CIK): FakeResponse(200, nvda_facts),
     })
-    app = create_app(SecClient(TEST_UA, session=session, min_interval=0))
+    finnhub = StubFinnhub(quote=QUOTE, peers=["AVGO", "AMD", "INTC", "MU", "TXN"], metrics=PEER_METRICS)
+    app = create_app(SecClient(TEST_UA, session=session, min_interval=0), finnhub=finnhub, tiingo=StubTiingo(CLOSES))
     server = make_server("127.0.0.1", 0, app, threaded=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -84,7 +87,11 @@ def test_full_flow_type_confirm_and_open_source(page, base_url):
 def test_panel_floats_without_moving_rows_and_stays_in_view(page, base_url):
     page.goto(base_url + "/summary/NVDA")
     next_row = page.locator("tr[data-key=current_ratio]")
-    before = next_row.bounding_box()
+
+    def document_y(locator):  # independent of any scrolling the click causes
+        return locator.bounding_box()["y"] + page.evaluate("window.scrollY")
+
+    before = document_y(next_row)
     for key, column in (("roe", 1), ("roe", 2), ("revenue_growth_yoy", 1)):
         source_summary(page, key, column).click()
         box = page.locator(f"tr[data-key={key}] td:nth-of-type({column}) .source").bounding_box()
@@ -92,7 +99,7 @@ def test_panel_floats_without_moving_rows_and_stays_in_view(page, base_url):
         assert box["x"] >= 0 and box["x"] + box["width"] <= viewport["width"]
         assert box["y"] >= 0
         assert page.evaluate("document.documentElement.scrollWidth") <= viewport["width"]
-    assert next_row.bounding_box()["y"] == before["y"]
+    assert document_y(next_row) == before
 
 
 def test_only_one_source_open_at_a_time(page, base_url):
@@ -144,3 +151,44 @@ def test_narrow_phone_layout_has_no_horizontal_scroll(browser, base_url):
     assert box["x"] >= 0 and box["x"] + box["width"] <= 390
     assert page.evaluate("document.documentElement.scrollWidth") <= 390
     context.close()
+
+
+def test_valuation_section_chart_and_sources(page, base_url):
+    page.goto(base_url + "/summary/NVDA")
+    section = page.locator("#valuation")
+    section.scroll_into_view_if_needed()
+    assert section.is_visible() and section.get_attribute("data-status") == "ok"
+    assert "$203.48" in page.inner_text("section.summary-head") and "שעון ישראל" in page.inner_text("section.summary-head")
+    assert page.locator("#valuation svg.history-chart rect.col").count() == 3
+    assert page.locator("#valuation svg.bar-track").count() == 6          # company, history, peers, 3 leaders
+    assert page.locator("#valuation .peer").count() == 5
+
+    pe = page.locator('#valuation [data-kpi="pe"]')
+    assert pe.locator("summary").inner_text().strip() == "25.6x"
+    panel = pe.locator(".source")
+    assert not panel.is_visible()
+    pe.locator("summary").click()
+    assert panel.is_visible()
+    text = panel.inner_text()
+    assert "Finnhub" in text and "quote" in text and "בדיקה צולבת" in text and "25.8x" in text
+    box = panel.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= page.viewport_size["width"]
+    assert page.evaluate("document.documentElement.scrollWidth") <= page.viewport_size["width"]
+
+    pe.locator("summary").click()
+    eps = page.locator('#valuation [data-kpi="eps"]')
+    eps.locator("summary").click()
+    eps_text = eps.locator(".source").inner_text()
+    assert "מספר מניות בדילול" in eps_text and "24,285" in eps_text and "ספקים אחרים" in eps_text
+    assert page.locator("details.src[open]").count() == 1
+    assert page.csp_errors == []
+
+
+def test_valuation_history_points_open_with_sources(page, base_url):
+    page.goto(base_url + "/summary/NVDA")
+    page.locator("#valuation details.points > summary").click()
+    rows = page.locator("#valuation table.points-table tbody tr")
+    assert rows.count() == 3
+    rows.first.locator("td:nth-of-type(1) summary").click()
+    text = rows.first.locator("td:nth-of-type(1) .source").inner_text()
+    assert "Tiingo" in text and "206.84" in text and "24.07.2026" in text
