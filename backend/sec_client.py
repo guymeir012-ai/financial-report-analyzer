@@ -101,8 +101,9 @@ class SecClient:
         try:
             data = self._fetch_json(url)
         except SecError as exc:
-            # A missing resource is final; any other failure may be transient, so an old copy beats an error.
-            if cached and exc.status != 404:
+            # Only a transient failure (network, 429, 5xx) falls back to an old copy.
+            # A 404, a block (403) or a broken answer must surface, not hide behind stale data.
+            if cached and (exc.status is None or exc.status in RETRY_STATUSES):
                 log.warning("SEC unavailable (status=%s), serving stale cached copy", exc.status)
                 return cached[1]
             raise

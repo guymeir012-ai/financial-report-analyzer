@@ -104,8 +104,7 @@ def test_stale_copy_served_when_sec_is_down(tmp_path, fake_time, caplog):
     clock = Clock()
     make(tmp_path, {URL: FakeResponse(200, {"old": 1})}, clock)[0].submissions(NVDA_CIK)
     clock.now += 10 * HOUR
-    for failure in (FakeResponse(503), FakeResponse(429), requests.ConnectionError("down"),
-                    FakeResponse(403), FakeResponse(200, None)):
+    for failure in (FakeResponse(503), FakeResponse(429), requests.ConnectionError("down")):
         client, _ = make(tmp_path, {URL: failure}, clock)
         with caplog.at_level(logging.WARNING):
             assert client.submissions(NVDA_CIK) == {"old": 1}
@@ -114,14 +113,17 @@ def test_stale_copy_served_when_sec_is_down(tmp_path, fake_time, caplog):
     assert json.loads(cache_files(tmp_path)[0].read_text())["fetched_at"] == 1_800_000_000.0
 
 
-def test_404_never_falls_back_to_stale_copy(tmp_path, fake_time):
+@pytest.mark.parametrize("failure, status", [
+    (FakeResponse(404), 404), (FakeResponse(403), 403), (FakeResponse(200, None), 200),
+])
+def test_non_transient_failure_never_falls_back_to_stale_copy(tmp_path, fake_time, failure, status):
     clock = Clock()
     make(tmp_path, {URL: FakeResponse(200, {"old": 1})}, clock)[0].submissions(NVDA_CIK)
     clock.now += 10 * HOUR
-    client, _ = make(tmp_path, {URL: FakeResponse(404)}, clock)
+    client, _ = make(tmp_path, {URL: failure}, clock)
     with pytest.raises(SecError) as exc:
         client.submissions(NVDA_CIK)
-    assert exc.value.status == 404
+    assert exc.value.status == status
 
 
 def test_failure_without_copy_raises_normal_error(tmp_path, fake_time):
