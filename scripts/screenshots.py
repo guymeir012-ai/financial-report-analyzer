@@ -1,4 +1,4 @@
-"""Save screenshots of the pages to docs/screenshots/ (offline: NVDA fixtures, no SEC access).
+"""Save screenshots of the pages to docs/screenshots/ (offline: NVDA fixtures and stub price providers).
 
 Run from the repo root: python scripts/screenshots.py
 """
@@ -17,7 +17,8 @@ from backend import sec_client  # noqa: E402
 from backend.app import create_app  # noqa: E402
 from backend.sec_client import SecClient  # noqa: E402
 from tests.conftest import (  # noqa: E402
-    FIXTURES, NVDA_CIK, TEST_UA, TICKERS, FakeResponse, FakeSession,
+    CLOSES, FIXTURES, NVDA_CIK, PEER_METRICS, QUOTE, TEST_UA, TICKERS, FakeResponse, FakeSession,
+    StubFinnhub, StubTiingo,
 )
 
 OUT = ROOT / "docs" / "screenshots"
@@ -35,7 +36,9 @@ def fixture_client() -> SecClient:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    server = make_server("127.0.0.1", 0, create_app(fixture_client()), threaded=True)
+    finnhub = StubFinnhub(quote=QUOTE, peers=["AVGO", "AMD", "INTC", "MU", "TXN"], metrics=PEER_METRICS)
+    app = create_app(fixture_client(), finnhub=finnhub, tiingo=StubTiingo(CLOSES))
+    server = make_server("127.0.0.1", 0, app, threaded=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}"
     try:
@@ -59,6 +62,12 @@ def main() -> None:
             shot("/summary/NVDA", "4-summary-source.png",
                  before=lambda: page.click("tr[data-key=roe] td:nth-of-type(1) summary"))
             shot("/confirm?ticker=NVDX", "5-unknown-ticker.png")
+            page.goto(base + "/summary/NVDA")
+            page.locator("#valuation").screenshot(path=str(OUT / "6-valuation.png"))
+            print("saved", OUT / "6-valuation.png")
+            page.locator('#valuation [data-kpi="pe"] summary').click()
+            page.locator("#valuation").screenshot(path=str(OUT / "7-valuation-source.png"))
+            print("saved", OUT / "7-valuation-source.png")
             browser.close()
     finally:
         server.shutdown()
