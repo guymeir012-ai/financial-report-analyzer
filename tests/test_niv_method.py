@@ -5,7 +5,8 @@ import pytest
 
 from backend.niv_method import (
     PeriodPL, classify_transition, compare, efficiency, efficiency_change_points,
-    format_usd_he, net_profit_transition, q4_report_periods, revenue_growth_pct, stage_position,
+    format_usd_he, net_profit_transition, q4_report_analysis, q4_report_periods, revenue_growth_pct,
+    stage_position, turning_lines,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -52,7 +53,7 @@ def test_clf_annual_stage_4_to_6(clf):
 
 
 def test_clf_quarter_stage_6_to_7(clf):
-    # open question: does Niv place a Q4 report on the annual or the quarterly basis?
+    # Niv: no fixed basis for a Q4 report, both comparisons are shown
     stage = compare(*clf["quarter"])["stage"]
     assert (stage["from_stage"], stage["to_stage"]) == (6, 7)
 
@@ -172,3 +173,38 @@ def test_unknown_fiscal_year():
     facts = json.loads((FIXTURES / "clf_companyfacts_min.json").read_text())
     assert q4_report_periods(facts, 2015) is None
     assert q4_report_periods({}, 2021) is None
+
+
+# ---------- a Q4 report: both comparisons, highlights from either (Niv, 22.11.2026) ----------
+
+def test_clf_q4_shows_both_stages_without_choosing(clf):
+    r = q4_report_analysis(clf)
+    stages = {b: (c["stage"]["from_stage"], c["stage"]["to_stage"]) for b, c in r["comparisons"].items()}
+    assert stages == {"quarter": (6, 7), "annual": (4, 6)}
+
+
+def test_clf_q4_highlights_the_annual_turn_to_profit(clf):
+    r = q4_report_analysis(clf)
+    texts = [h["text_he"] for h in r["highlights"]]
+    assert "מעבר מהפסד נקי של 81 מיליון דולר לרווח נקי של 3 מיליארד דולר בהשוואה השנתית." in texts
+    assert all(h["basis"] == "annual" for h in r["highlights"])
+    assert all(h["direction"] == "up" for h in r["highlights"])
+
+
+def test_turn_in_quarter_only_is_flagged():
+    prior, current = p(100, 110, -10, -5), p(130, 120, 10, 4)
+    r = q4_report_analysis({"quarter": (prior, current), "annual": (p(400, 380, 20, 10), p(500, 470, 30, 15))})
+    assert [(h["basis"], h["line"]) for h in r["highlights"]] == [("quarter", "net_income"), ("quarter", "operating_income")]
+
+
+def test_turn_down_is_flagged():
+    t = turning_lines(p(100e6, 80e6, 20e6, 10e6), p(90e6, 95e6, -5e6, -8e6))
+    assert {x["direction"] for x in t} == {"down"}
+    assert t[0]["text_he"] == "מעבר מרווח נקי של 10 מיליון דולר להפסד נקי של 8 מיליון דולר"
+
+
+def test_no_turn_and_missing_quarter():
+    assert turning_lines(p(100, 80, 20, 10), p(120, 90, 30, 20)) == []
+    assert turning_lines(p(100, 80, None, None), p(120, 90, 30, 20)) == []
+    r = q4_report_analysis({"annual": (p(100, 80, 20, 10), p(120, 90, 30, 20)), "quarter": None})
+    assert list(r["comparisons"]) == ["annual"] and r["highlights"] == []

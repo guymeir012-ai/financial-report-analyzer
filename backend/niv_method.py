@@ -261,3 +261,40 @@ def compare(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
         "stage": classify_transition(prior, current),
         "sources": {"prior": prior.sources, "current": current.sources},
     }
+
+
+# ---------- a Q4 report: both comparisons, highlights from either ----------
+# Niv (answer of 22.11.2026): there is no fixed basis. A line such as a move from loss to profit
+# matters as part of the report whether it shows up in the quarterly or the annual comparison.
+
+_BASIS_HE = {"quarter": "בהשוואה הרבעונית", "annual": "בהשוואה השנתית"}
+
+
+def turning_lines(prior: PeriodPL, current: PeriodPL) -> list[dict[str, Any]]:
+    """Lines that turned from a loss to a profit (or back), net or operating."""
+    found = []
+    for key, word in (("net_income", "נקי"), ("operating_income", "תפעולי")):
+        a, b = getattr(prior, key), getattr(current, key)
+        if a is None or b is None:
+            continue
+        if a <= 0 < b:
+            found.append({"line": key, "direction": "up",
+                          "text_he": f"מעבר מהפסד {word} של {format_usd_he(a)} לרווח {word} של {format_usd_he(b)}"})
+        elif b <= 0 < a:
+            found.append({"line": key, "direction": "down",
+                          "text_he": f"מעבר מרווח {word} של {format_usd_he(a)} להפסד {word} של {format_usd_he(b)}"})
+    return found
+
+
+def q4_report_analysis(periods: dict[str, tuple[PeriodPL, PeriodPL] | None]) -> dict[str, Any]:
+    """Both comparisons side by side; no basis is chosen. Turning lines from either are flagged."""
+    result: dict[str, Any] = {"comparisons": {}, "highlights": []}
+    for basis in ("quarter", "annual"):
+        pair = periods.get(basis)
+        if pair is None:
+            continue
+        result["comparisons"][basis] = compare(*pair)
+        for t in turning_lines(*pair):
+            result["highlights"].append({**t, "basis": basis,
+                                         "text_he": f"{t['text_he']} {_BASIS_HE[basis]}."})
+    return result
