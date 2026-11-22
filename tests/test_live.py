@@ -132,3 +132,14 @@ def test_pages_render_live_with_valuation(client, providers):
     assert 'data-status="ok"' in bank and "לא רלוונטי לבנקים" in bank
     assert not any(word in html + bank for word in ("קנייה", "מכירה", "המלצ", "Buy", "Sell"))
     assert http.get("/api/valuation/NVDA").get_json()["current"]["pe"]["status"] == "ok"
+
+
+def test_niv_method_clf_q4_2021(client):
+    from backend.niv_method import compare, q4_report_periods
+    cik, _ = resolve_ticker(client, "CLF")
+    periods = q4_report_periods(client.company_facts(cik), 2021)
+    quarter, annual = compare(*periods["quarter"]), compare(*periods["annual"])
+    assert periods["quarter"][0].revenue == pytest.approx(2_256_200_000)
+    assert (round(quarter["revenue_growth_pct"]), round(annual["revenue_growth_pct"])) == (137, 282)
+    assert (round(quarter["efficiency_change_points"]), round(annual["efficiency_change_points"])) == (16, 22)
+    assert (annual["stage"]["from_stage"], annual["stage"]["to_stage"]) == (4, 6)
