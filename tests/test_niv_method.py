@@ -4,26 +4,37 @@ from pathlib import Path
 import pytest
 
 from backend.niv_method import (
-    PeriodPL, classify_transition, compare, efficiency, efficiency_change_points,
-    format_usd_he, net_profit_transition, q4_report_analysis, q4_report_periods, revenue_growth_pct,
-    stage_position, turning_lines,
+    PeriodPL, classify_transition, compare, efficiency, efficiency_change_points, filing_periods,
+    format_usd_he, net_profit_transition, report_analysis, revenue_growth_pct, stage_position,
+    turning_lines,
 )
+from tests.conftest import make_facts, make_filing
 
 FIXTURES = Path(__file__).parent / "fixtures"
+CLF_10K_2021 = "0000764065-22-000037"
+
+
+def clf_filing():
+    return make_filing(form="10-K", accession=CLF_10K_2021, report_date="2021-12-31",
+                       filing_date="2022-02-11", cik=764065, doc="clf-20211231.htm")
 
 
 @pytest.fixture(scope="module")
-def clf():
-    facts = json.loads((FIXTURES / "clf_companyfacts_min.json").read_text())
-    return q4_report_periods(facts, 2021)
+def clf_facts():
+    return json.loads((FIXTURES / "clf_companyfacts_min.json").read_text())
+
+
+@pytest.fixture(scope="module")
+def clf(clf_facts):
+    return filing_periods(clf_facts, clf_filing())
 
 
 # ---------- golden test: CLF Q4 2021, Niv's numbers from lesson 13 ----------
 
 def test_clf_quarter_matches_niv(clf):
     prior, current = clf["quarter"]
-    # prior-year Q4 revenue was heard as "256"; EDGAR (FY 2020 minus 9M 2020) gives 2,256.2M
-    assert prior.revenue == pytest.approx(2_256_200_000)
+    # Niv's prior-year Q4 revenue is 2,256M: FY 2020 minus the nine months as last filed before this 10-K
+    assert prior.revenue == pytest.approx(2_256_000_000)
     assert current.revenue == pytest.approx(5_346_000_000)
     c = compare(prior, current)
     assert round(c["revenue_growth_pct"]) == 137
@@ -60,10 +71,101 @@ def test_clf_quarter_stage_6_to_7(clf):
 
 def test_clf_sources_point_to_filings(clf):
     _, current = clf["quarter"]
-    assert current.sources["revenue"]["derived"] == "שנה מלאה פחות תשעה חודשים"
-    assert current.sources["revenue"]["full_year"]["form"] == "10-K"
-    assert current.sources["revenue"]["nine_months"]["form"] == "10-Q"
-    assert current.sources["net_income"]["tag"] == "ProfitLoss"
+    src = current.sources["revenue"]
+    assert src["derived"] == "שנה מלאה פחות תשעה חודשים"
+    full, nine = src["values"]
+    assert (full["role_he"], full["form"], full["accession"]) == ("שנה מלאה", "10-K", CLF_10K_2021)
+    assert (nine["role_he"], nine["form"], nine["end"]) == ("תשעה חודשים ראשונים", "10-Q", "2021-09-30")
+    assert full["url"].startswith("https://www.sec.gov/Archives/edgar/data/764065/")
+    assert current.sources["net_income"]["values"][0]["concept"] == "ProfitLoss"
+    assert current.end == "2021-12-31"
+
+
+def test_clf_nine_months_come_from_what_was_filed_before_the_report(clf):
+    prior, current = clf["quarter"]
+    # both nine-month figures are taken from the third 10-Q of 2021, not from later filings
+    assert prior.sources["revenue"]["values"][1]["filed"] == "2021-10-26"
+    assert current.sources["revenue"]["values"][1]["filed"] == "2021-10-26"
+
+
+# ---------- any filing: 10-Q, shifted fiscal years, gaps ----------
+
+def test_10q_gives_the_quarter_comparison_only(nvda_facts, latest):
+    periods = filing_periods(nvda_facts, latest)
+    assert periods["annual"] is None
+    prior, current = periods["quarter"]
+    assert (prior.revenue, current.revenue) == (46_743_000_000, 96_221_000_000)
+    assert (prior.end, current.end) == ("2025-07-27", "2026-07-26")
+    c = compare(prior, current)
+    assert c["revenue_growth_pct"] == pytest.approx((96_221 / 46_743 - 1) * 100)
+    # no CostsAndExpenses in the filing: costs = revenue minus operating income
+    assert current.sources["costs"]["derived"] == "הכנסות פחות רווח תפעולי"
+    assert c["efficiency_current"] == pytest.approx((96_221 - 63_734) / 96_221)
+    assert (c["stage"]["from_stage"], c["stage"]["to_stage"]) == (6, 7)
+    assert report_analysis(periods)["highlights"] == []
+
+
+def shifted_year_facts(nine_months=True):
+    """A 52/53-week fiscal year: the two years do not start or end on the same calendar day."""
+    accn, q3 = "0000000001-26-000009", "0000000001-25-000007"
+    rows = []
+    for tag, fy_prior, fy_cur, nine_prior, nine_cur in (
+        ("Revenues", 1000e6, 1500e6, 700e6, 1000e6),
+        ("OperatingIncomeLoss", -50e6, 120e6, -60e6, 40e6),
+        ("NetIncomeLoss", -80e6, 90e6, -70e6, 20e6),
+    ):
+        rows += [(tag, "2024-01-29", "2025-01-26", fy_prior, accn, "10-K"),
+                 (tag, "2025-01-27", "2026-01-25", fy_cur, accn, "10-K")]
+        if nine_months:
+            rows += [(tag, "2024-01-29", "2024-10-27", nine_prior, q3, "10-Q"),
+                     (tag, "2025-01-27", "2025-10-26", nine_cur, q3, "10-Q")]
+    filing = make_filing(form="10-K", accession=accn, report_date="2026-01-25", filing_date="2026-03-15")
+    return make_facts(accn, rows), filing
+
+
+def test_10k_with_shifted_fiscal_year():
+    periods = filing_periods(*shifted_year_facts())
+    prior, current = periods["annual"]
+    assert (prior.revenue, current.revenue) == (1000e6, 1500e6)
+    q_prior, q_current = periods["quarter"]
+    assert (q_prior.revenue, q_current.revenue) == (300e6, 500e6)
+    assert (q_prior.net_income, q_current.net_income) == (-10e6, 70e6)
+    r = report_analysis(periods)
+    # the quarter's operating line was already a profit a year earlier (-50 minus -60), so it is not a turn
+    assert {(h["basis"], h["line"]) for h in r["highlights"]} == {
+        ("quarter", "net_income"), ("annual", "net_income"), ("annual", "operating_income")}
+
+
+def test_10k_without_nine_months_has_no_quarter():
+    periods = filing_periods(*shifted_year_facts(nine_months=False))
+    assert periods["quarter"] is None
+    assert list(report_analysis(periods)["comparisons"]) == ["annual"]
+
+
+def test_net_income_uses_one_concept_for_both_periods():
+    accn = "0000000001-26-000001"
+    facts = make_facts(accn, [
+        ("Revenues", "2026-04-01", "2026-06-30", 200e6), ("Revenues", "2025-04-01", "2025-06-30", 150e6),
+        ("ProfitLoss", "2026-04-01", "2026-06-30", 21e6),  # no comparative under this concept
+        ("NetIncomeLoss", "2026-04-01", "2026-06-30", 20e6), ("NetIncomeLoss", "2025-04-01", "2025-06-30", 5e6),
+    ])
+    prior, current = filing_periods(facts, make_filing(accession=accn))["quarter"]
+    assert (prior.net_income, current.net_income) == (5e6, 20e6)
+    assert current.sources["net_income"]["values"][0]["concept"] == "NetIncomeLoss"
+
+
+def test_filing_without_facts_gives_empty_periods():
+    prior, current = filing_periods({}, make_filing())["quarter"]
+    assert current.revenue is None and current.sources == {}
+    c = report_analysis({"quarter": (prior, current), "annual": None})["comparisons"]["quarter"]
+    assert c["stage"]["to_stage"] is None and c["net_profit"] is None
+
+
+def test_unknown_growth_and_efficiency_are_not_called_weak():
+    s = classify_transition(p(None, None, None, 10), p(100, None, None, 20))
+    assert s["to_stage"] == 7
+    assert s["notes_he"] == ["אין נתון צמיחה בהכנסות, אי אפשר לבדוק את תנאי השלב.",
+                             "אין נתון התייעלות, אי אפשר לבדוק את תנאי השלב."]
 
 
 # ---------- the calculations ----------
@@ -161,30 +263,16 @@ def test_pre_revenue_and_missing():
     assert classify_transition(p(100, 80, 20, 10), p(120, 90, 30, 20))["joker_checked"] is False
 
 
-def test_costs_derived_when_tag_missing():
-    facts = json.loads((FIXTURES / "clf_companyfacts_min.json").read_text())
-    del facts["facts"]["us-gaap"]["CostsAndExpenses"]
-    prior, current = q4_report_periods(facts, 2021)["annual"]
-    assert current.costs == pytest.approx(20_444e6 - 4_012e6)
-    assert current.sources["costs"]["derived"] == "הכנסות פחות רווח תפעולי"
-
-
-def test_unknown_fiscal_year():
-    facts = json.loads((FIXTURES / "clf_companyfacts_min.json").read_text())
-    assert q4_report_periods(facts, 2015) is None
-    assert q4_report_periods({}, 2021) is None
-
-
 # ---------- a Q4 report: both comparisons, highlights from either (Niv, 22.11.2026) ----------
 
 def test_clf_q4_shows_both_stages_without_choosing(clf):
-    r = q4_report_analysis(clf)
+    r = report_analysis(clf)
     stages = {b: (c["stage"]["from_stage"], c["stage"]["to_stage"]) for b, c in r["comparisons"].items()}
     assert stages == {"quarter": (6, 7), "annual": (4, 6)}
 
 
 def test_clf_q4_highlights_the_annual_turn_to_profit(clf):
-    r = q4_report_analysis(clf)
+    r = report_analysis(clf)
     texts = [h["text_he"] for h in r["highlights"]]
     assert "מעבר מהפסד נקי של 81 מיליון דולר לרווח נקי של 3 מיליארד דולר בהשוואה השנתית." in texts
     assert all(h["basis"] == "annual" for h in r["highlights"])
@@ -193,7 +281,7 @@ def test_clf_q4_highlights_the_annual_turn_to_profit(clf):
 
 def test_turn_in_quarter_only_is_flagged():
     prior, current = p(100, 110, -10, -5), p(130, 120, 10, 4)
-    r = q4_report_analysis({"quarter": (prior, current), "annual": (p(400, 380, 20, 10), p(500, 470, 30, 15))})
+    r = report_analysis({"quarter": (prior, current), "annual": (p(400, 380, 20, 10), p(500, 470, 30, 15))})
     assert [(h["basis"], h["line"]) for h in r["highlights"]] == [("quarter", "net_income"), ("quarter", "operating_income")]
 
 
@@ -206,5 +294,5 @@ def test_turn_down_is_flagged():
 def test_no_turn_and_missing_quarter():
     assert turning_lines(p(100, 80, 20, 10), p(120, 90, 30, 20)) == []
     assert turning_lines(p(100, 80, None, None), p(120, 90, 30, 20)) == []
-    r = q4_report_analysis({"annual": (p(100, 80, 20, 10), p(120, 90, 30, 20)), "quarter": None})
+    r = report_analysis({"annual": (p(100, 80, 20, 10), p(120, 90, 30, 20)), "quarter": None})
     assert list(r["comparisons"]) == ["annual"] and r["highlights"] == []

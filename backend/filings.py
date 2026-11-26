@@ -10,6 +10,8 @@ PERIODIC_FORMS = ("10-Q", "10-K")
 PERIOD_BANDS = {"10-Q": (80, 100), "10-K": (350, 380)}
 # A prior-year comparative period ends this many days before the report date.
 PRIOR_YEAR_GAP = (350, 380)
+# Duration (days) of the first nine months of a fiscal year, as reported in the third 10-Q.
+NINE_MONTH_BAND = (260, 285)
 
 REVENUE_TAGS = (
     "Revenues",
@@ -263,6 +265,29 @@ class FilingFacts:
     def _all_units(self, tag: str, unit: str = "USD") -> Iterable[dict[str, Any]]:
         units = (self._gaap.get(tag) or {}).get("units") or {}
         return [x for x in units.get(unit) or [] if _is_number(x.get("val"))]
+
+    def nine_months_of(self, annual: SourcedValue) -> SourcedValue | None:
+        """Year-to-date value of the first nine months of the fiscal year `annual` covers.
+
+        Taken from any filing (it is reported in the third 10-Q, not in the 10-K), same concept.
+        Prefers the latest figure filed up to this filing's own date.
+        """
+        year_start, year_end = _parse_date(annual.start), _parse_date(annual.end)
+        if year_start is None or year_end is None:
+            return None
+        low, high = NINE_MONTH_BAND
+        matches = []
+        for fact in self._all_units(annual.concept, annual.unit):
+            start, end = _parse_date(fact.get("start")), _parse_date(fact.get("end"))
+            if (start and end and abs((start - year_start).days) <= 3
+                    and low <= (end - start).days <= high and end < year_end):
+                matches.append(fact)
+        if not matches:
+            return None
+        cutoff = self.filing.filing_date
+        known = [x for x in matches if cutoff and (x.get("filed") or "") <= cutoff]
+        best = max(known or matches, key=lambda x: x.get("filed") or "")
+        return self._sourced(annual.concept, best, annual.unit)
 
     def ttm_net_income(self, tags: Iterable[str] = NET_INCOME_TAGS) -> dict[str, SourcedValue | None]:
         """Components of trailing-twelve-month net income (one concept for all parts).

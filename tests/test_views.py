@@ -271,3 +271,121 @@ def test_build_valuation_view_none_and_partial():
     assert [b["label"] for b in v["bars"]] == ["החברה היום", "חציון החברה, 2 רבעונים"]
     assert v["bars"][0]["width"] == 0.0 and v["bars"][0]["text"] == "לא זמין כרגע"
     assert v["peers"]["median_gap"] == "—"
+
+
+# ---------- report reading (growth, efficiency, profit, 7-stage model) ----------
+
+def _clf_reading():
+    import json
+    from pathlib import Path
+
+    from backend.niv_method import filing_periods, report_analysis
+    from tests.conftest import make_filing
+
+    facts = json.loads((Path(__file__).parent / "fixtures" / "clf_companyfacts_min.json").read_text())
+    filing = make_filing(form="10-K", accession="0000764065-22-000037", report_date="2021-12-31",
+                         filing_date="2022-02-11", cik=764065, doc="clf-20211231.htm")
+    return report_analysis(filing_periods(facts, filing))
+
+
+def _rows(comparison):
+    return {r["key"]: r for r in comparison["rows"]}
+
+
+def test_niv_view_10k_has_both_comparisons_and_the_highlights():
+    from backend.views import build_niv_view
+
+    n = build_niv_view(_clf_reading())
+    assert n["status"] == "ok"
+    assert [c["basis"] for c in n["comparisons"]] == ["quarter", "annual"]
+    quarter, annual = n["comparisons"]
+    assert (quarter["stage"]["from"], quarter["stage"]["to"], quarter["stage"]["moved"]) == (6, 7, True)
+    assert (annual["stage"]["from"], annual["stage"]["to"]) == (4, 6)
+    assert (annual["prior_end"], annual["current_end"]) == ("31.12.2020", "31.12.2021")
+    assert [h["basis"] for h in n["highlights"]] == ["annual", "annual"]
+    assert n["highlights"][0]["text_he"].startswith("מעבר מהפסד נקי של 81 מיליון דולר")
+
+
+def test_niv_view_numbers_and_changes():
+    from backend.views import build_niv_view
+
+    quarter, annual = build_niv_view(_clf_reading())["comparisons"]
+    q, a = _rows(quarter), _rows(annual)
+    assert (q["revenue"]["prior"]["text"], q["revenue"]["current"]["text"]) == ("2,256", "5,346")
+    assert (q["revenue"]["change"]["text"], q["revenue"]["change"]["tone"]) == ("+137.0%", "good")
+    assert (q["efficiency"]["prior"]["text"], q["efficiency"]["current"]["text"]) == ("95.3%", "79.1%")
+    assert (q["efficiency"]["change"]["text"], q["efficiency"]["change"]["tone"]) == ("-16.2 pp", "good")
+    assert (a["efficiency"]["prior"]["text"], a["efficiency"]["current"]["text"]) == ("102.7%", "80.4%")
+    assert (a["net_income"]["prior"]["text"], a["net_income"]["current"]["text"]) == ("-81.0", "3,033")
+    # net profit is never shown as a percentage
+    assert a["net_income"]["change"]["tone"] is None and "%" not in a["net_income"]["change"]["text"]
+    assert quarter["net_text_he"] == "מעבר מרווח נקי של 74 מיליון דולר לרווח נקי של 899 מיליון דולר"
+
+
+def test_niv_view_sources_name_every_filing_behind_a_number():
+    from backend.views import build_niv_view
+
+    quarter, annual = build_niv_view(_clf_reading())["comparisons"]
+    src = _rows(quarter)["revenue"]["current"]["source"]
+    assert [c["name_he"] for c in src["components"]] == ["הכנסות, שנה מלאה", "הכנסות, תשעה חודשים ראשונים"]
+    assert [c["form"] for c in src["components"]] == ["10-K", "10-Q"]
+    assert all(c["url"].startswith("https://www.sec.gov/") for c in src["components"])
+    assert src["extra_he"] == ["מחושב: שנה מלאה פחות תשעה חודשים."]
+    eff = _rows(annual)["efficiency"]["current"]["source"]
+    assert [c["tag"] for c in eff["components"]] == ["CostsAndExpenses", "Revenues"]
+    assert [c["name_he"] for c in eff["components"]] == ["עלות מכר והוצאות תפעול", "הכנסות"]
+    assert eff["extra_he"] == []
+
+
+def test_niv_view_worsening_efficiency_and_falling_revenue_are_bad():
+    from backend.niv_method import PeriodPL, report_analysis
+    from backend.views import build_niv_view
+
+    prior, current = PeriodPL("a", 100e6, 80e6, 20e6, 10e6), PeriodPL("b", 90e6, 95e6, -5e6, -8e6)
+    n = build_niv_view(report_analysis({"quarter": (prior, current), "annual": None}))
+    rows = _rows(n["comparisons"][0])
+    assert (rows["revenue"]["change"]["text"], rows["revenue"]["change"]["tone"]) == ("-10.0%", "bad")
+    assert (rows["efficiency"]["change"]["text"], rows["efficiency"]["change"]["tone"]) == ("+25.6 pp", "bad")
+    assert {h["direction"] for h in n["highlights"]} == {"down"}
+    assert n["comparisons"][0]["stage"]["verdict_he"].startswith("ירידה או עמידה באותו שלב")
+
+
+def test_niv_view_same_stage_is_shown_as_staying():
+    from backend.niv_method import PeriodPL, report_analysis
+    from backend.views import build_niv_view
+
+    pair = (PeriodPL("a", 100e6, 120e6, -20e6, -25e6), PeriodPL("b", 115e6, 130e6, -15e6, -20e6))
+    stage = build_niv_view(report_analysis({"quarter": pair, "annual": None}))["comparisons"][0]["stage"]
+    assert (stage["from"], stage["to"], stage["moved"], stage["known"]) == (4, 4, False, True)
+
+
+def test_niv_view_unavailable_and_empty():
+    from backend.niv_method import filing_periods, report_analysis
+    from backend.views import build_niv_view
+    from tests.conftest import make_filing
+
+    assert build_niv_view(None)["status"] == "unavailable"
+    empty = build_niv_view(report_analysis(filing_periods({}, make_filing())))
+    assert (empty["status"], empty["status_he"], empty["comparisons"]) == ("empty", "לא דווח", [])
+
+
+def test_niv_view_drops_links_that_are_not_sec():
+    from backend.views import build_niv_view
+
+    reading = _clf_reading()
+    for side in reading["comparisons"]["annual"]["sources"].values():
+        for src in side.values():
+            for v in src["values"]:
+                v["url"] = "https://evil.example/x"
+    annual = build_niv_view(reading)["comparisons"][1]
+    assert all(c["url"] is None for c in _rows(annual)["revenue"]["current"]["source"]["components"])
+
+
+def test_niv_view_flat_change_has_no_sign():
+    from backend.niv_method import PeriodPL, report_analysis
+    from backend.views import build_niv_view
+
+    pair = (PeriodPL("a", 100e6, 80e6, 20e6, 10e6), PeriodPL("b", 100e6, 80e6, 20e6, 10e6))
+    rows = _rows(build_niv_view(report_analysis({"quarter": pair, "annual": None}))["comparisons"][0])
+    assert (rows["revenue"]["change"]["text"], rows["revenue"]["change"]["tone"]) == ("0.0%", "neutral")
+    assert (rows["efficiency"]["change"]["text"], rows["efficiency"]["change"]["tone"]) == ("0.0 pp", "neutral")
