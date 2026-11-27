@@ -389,3 +389,54 @@ def test_niv_view_flat_change_has_no_sign():
     rows = _rows(build_niv_view(report_analysis({"quarter": pair, "annual": None}))["comparisons"][0])
     assert (rows["revenue"]["change"]["text"], rows["revenue"]["change"]["tone"]) == ("0.0%", "neutral")
     assert (rows["efficiency"]["change"]["text"], rows["efficiency"]["change"]["tone"]) == ("0.0 pp", "neutral")
+
+
+# ---------- lesson 14: previous quarter and the efficiency breakdown ----------
+
+def _nvda_q1_view():
+    import json
+    from pathlib import Path
+
+    from backend.niv_method import filing_periods, report_analysis
+    from backend.views import build_niv_view
+    from tests.conftest import make_filing
+
+    facts = json.loads((Path(__file__).parent / "fixtures" / "nvda_q1fy24_companyfacts_min.json").read_text())
+    filing = make_filing(form="10-Q", accession="0001045810-23-000093", report_date="2023-04-30",
+                         filing_date="2023-05-26", cik=1045810, doc="nvda-20230430.htm")
+    return build_niv_view(report_analysis(filing_periods(facts, filing)))["comparisons"][0]
+
+
+def test_niv_view_nvda_lesson_numbers():
+    rows = _rows(_nvda_q1_view())
+    assert (rows["revenue"]["prior"]["text"], rows["revenue"]["current"]["text"]) == ("8,288", "7,192")
+    assert (rows["revenue"]["change"]["text"], rows["revenue"]["change"]["tone"]) == ("-13.2%", "bad")
+    assert (rows["efficiency"]["prior"]["text"], rows["efficiency"]["current"]["text"]) == ("77.5%", "70.2%")
+    assert (rows["efficiency"]["change"]["text"], rows["efficiency"]["change"]["tone"]) == ("-7.2 pp", "good")
+    assert (rows["net_income"]["prior"]["text"], rows["net_income"]["current"]["text"]) == ("1,618", "2,043")
+
+
+def test_niv_view_efficiency_source_lists_both_expense_lines():
+    source = _rows(_nvda_q1_view())["efficiency"]["current"]["source"]
+    assert [(c["name_he"], c["value"]) for c in source["components"]] == [
+        ("עלות ההכנסות", "2,544"), ("הוצאות תפעול", "2,508"), ("הכנסות", "7,192")]
+    assert source["extra_he"] == ["מחושב: עלות מכר ועוד הוצאות תפעול."]
+
+
+def test_niv_view_previous_quarter_is_its_own_block():
+    view = _nvda_q1_view()
+    previous = view["previous_quarter"]
+    assert (previous["revenue"]["text"], previous["end"]) == ("6,051", "29.01.2023")
+    assert (previous["change"]["text"], previous["change"]["tone"]) == ("+18.9%", "good")
+    source = previous["revenue"]["source"]
+    assert [c["name_he"] for c in source["components"]] == ["הכנסות, שנה מלאה", "הכנסות, תשעה חודשים ראשונים"]
+    assert source["extra_he"] == ["מחושב: שנה מלאה פחות תשעה חודשים."]
+    # the same-quarter table is untouched by it
+    assert [r["key"] for r in view["rows"]] == ["revenue", "efficiency", "operating_income", "net_income"]
+
+
+def test_niv_view_without_a_previous_quarter():
+    from backend.views import build_niv_view
+
+    quarter, annual = build_niv_view(_clf_reading())["comparisons"]
+    assert quarter["previous_quarter"] is None and annual["previous_quarter"] is None

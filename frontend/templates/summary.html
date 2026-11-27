@@ -164,6 +164,21 @@
       </tbody>
     </table>
     {% if c.net_text_he %}<p class="net-text">{{ c.net_text_he }}.</p>{% endif %}
+    {% if c.previous_quarter %}
+    {% set pq = c.previous_quarter %}
+    <div class="prev-quarter" data-line="previous_quarter">
+      <span class="prev-label">הכנסות מול הרבעון הקודם{% if pq.end %}<span class="prev-sub">הרבעון הקודם הסתיים ב-<bdi dir="ltr" class="num">{{ pq.end }}</bdi></span>{% endif %}</span>
+      <span class="prev-value">{{ value_cell(pq.revenue) }} <span class="unit">מיליוני דולר</span></span>
+      <span class="cell change {{ pq.change.tone or 'none' }}">
+        {% if pq.change.tone %}
+        <bdi dir="ltr" class="num"><span class="arrow" aria-hidden="true">{{ pq.change.arrow }}</span> {{ pq.change.text }}</bdi>
+        <span class="sr-only">{{ pq.change.tone_he }}</span>
+        {% else %}
+        <span class="muted">{{ pq.change.text }}</span>
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
   <p class="table-foot">צמיחה = הכנסות התקופה חלקי הכנסות התקופה המקבילה, פחות 1. התייעלות = עלות מכר ועוד הוצאות תפעול, חלקי ההכנסות: ירידה היא שינוי לטובה. רווח נקי מוצג בסכומים בלבד. כל החישובים בקוד, מתוך נתוני <bdi dir="ltr">XBRL</bdi> של SEC.</p>

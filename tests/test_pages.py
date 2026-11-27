@@ -680,3 +680,59 @@ def test_reading_has_no_inline_styles_scripts_or_foreign_links(fake_time):
     assert " style=" not in block and "<script" not in block
     assert all(url.startswith("https://www.sec.gov/") for url in SEC_LINK.findall(block))
     assert not any(w in html for w in FORBIDDEN_WORDS)
+
+
+# ---------- lesson 14: previous quarter line and the efficiency breakdown ----------
+
+NVDA_Q1_FY24 = "0001045810-23-000093"
+
+
+def nvda_q1_client():
+    """Nvidia's report for the quarter that ended on 30.4.2023, served through the fake SEC session."""
+    facts = json.loads((Path(__file__).parent / "fixtures" / "nvda_q1fy24_companyfacts_min.json").read_text())
+    subs = {"name": "NVIDIA CORP", "sic": "3674", "filings": {"recent": {
+        "accessionNumber": [NVDA_Q1_FY24], "filingDate": ["2023-05-26"], "reportDate": ["2023-04-30"],
+        "form": ["10-Q"], "primaryDocument": ["nvda-20230430.htm"]}}}
+    return make_client(subs, facts)
+
+
+def previous_block(html: str) -> str:
+    return re.search(r'<div class="prev-quarter" data-line="previous_quarter">.*?</div>\s*</div>', reading(html), re.S).group(0)
+
+
+def test_reading_lesson_14_report(fake_time):
+    resp = page(nvda_q1_client(), "/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200
+    q = comparison(html, "quarter")
+    assert ">8,288<" in line(q, "revenue") and ">7,192<" in line(q, "revenue")
+    assert "-13.2%" in line(q, "revenue") and "change bad" in line(q, "revenue")
+    efficiency = line(q, "efficiency")
+    assert ">77.5%<" in efficiency and ">70.2%<" in efficiency and "-7.2 pp" in efficiency
+    assert "מחושב: עלות מכר ועוד הוצאות תפעול." in efficiency
+    assert "CostOfRevenue" in efficiency and "OperatingExpenses" in efficiency
+    previous = previous_block(html)
+    assert "הכנסות מול הרבעון הקודם" in previous and ">6,051<" in previous and "+18.9%" in previous
+    assert "change good" in previous and ">29.01.2023<" in previous
+    assert "מחושב: שנה מלאה פחות תשעה חודשים." in previous
+    # the two comparisons stay apart: the previous quarter is outside the same-quarter table
+    assert "6,051" not in q
+    assert_clean(resp)
+
+
+def test_reading_previous_quarter_on_a_regular_quarterly_report(http):
+    html = text_of(http.get("/summary/NVDA"))
+    previous = previous_block(html)
+    assert ">81,615<" in previous and "+17.9%" in previous and ">26.04.2026<" in previous
+
+
+def test_reading_without_previous_quarter_has_no_block(fake_time):
+    html = text_of(page(clf_client(), "/summary/NVDA"))
+    assert 'class="prev-quarter"' not in html
+
+
+def test_reading_previous_quarter_has_no_inline_styles_or_foreign_links(fake_time):
+    resp = page(nvda_q1_client(), "/summary/NVDA")
+    block = reading(text_of(resp))
+    assert " style=" not in block and "<script" not in block
+    assert all(url.startswith("https://www.sec.gov/") for url in SEC_LINK.findall(block))

@@ -162,3 +162,19 @@ def test_niv_method_on_latest_filing_of_real_companies(client, ticker):
         assert all(v is not None for v in c["values"]["revenue"])
         assert all(v is not None for v in c["values"]["net_income"])
         assert c["stage"]["to_stage"] is not None
+
+
+def test_niv_method_nvda_q1_fy2024(client):
+    """Lesson 14's report: every figure Niv computed in class, from EDGAR itself."""
+    from backend.filings import find_company_filings
+    from backend.niv_method import filing_periods, guidance_growth_pct, report_analysis
+    _, cik, _, periodic, _ = find_company_filings(client, "NVDA")
+    filing = next(x for x in periodic if x.form == "10-Q" and x.report_date == "2023-04-30")
+    c = report_analysis(filing_periods(client.company_facts(cik), filing))["comparisons"]["quarter"]
+    assert c["values"]["revenue"] == (8_288_000_000, 7_192_000_000)
+    assert round(c["revenue_growth_pct"], 1) == -13.2
+    assert c["previous_quarter"]["revenue"] == 6_051_000_000
+    assert round(c["previous_quarter"]["revenue_growth_pct"], 1) == 18.9
+    assert (round(c["efficiency_prior"] * 100), round(c["efficiency_current"] * 100)) == (77, 70)
+    assert c["values"]["net_income"] == (1_618_000_000, 2_043_000_000)
+    assert round(guidance_growth_pct(11_000_000_000, c["values"]["revenue"][1])) == 53

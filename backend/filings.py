@@ -12,6 +12,8 @@ PERIOD_BANDS = {"10-Q": (80, 100), "10-K": (350, 380)}
 PRIOR_YEAR_GAP = (350, 380)
 # Duration (days) of the first nine months of a fiscal year, as reported in the third 10-Q.
 NINE_MONTH_BAND = (260, 285)
+# The previous period ends at most this many days before the next one starts.
+PREVIOUS_PERIOD_GAP = 7
 
 REVENUE_TAGS = (
     "Revenues",
@@ -266,6 +268,14 @@ class FilingFacts:
         units = (self._gaap.get(tag) or {}).get("units") or {}
         return [x for x in units.get(unit) or [] if _is_number(x.get("val"))]
 
+    def _latest_known(self, matches: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Among equivalent facts from several filings: the latest one filed up to this filing's own date."""
+        if not matches:
+            return None
+        cutoff = self.filing.filing_date
+        known = [x for x in matches if cutoff and (x.get("filed") or "") <= cutoff]
+        return max(known or matches, key=lambda x: x.get("filed") or "")
+
     def nine_months_of(self, annual: SourcedValue) -> SourcedValue | None:
         """Year-to-date value of the first nine months of the fiscal year `annual` covers.
 
@@ -282,12 +292,24 @@ class FilingFacts:
             if (start and end and abs((start - year_start).days) <= 3
                     and low <= (end - start).days <= high and end < year_end):
                 matches.append(fact)
-        if not matches:
+        best = self._latest_known(matches)
+        return self._sourced(annual.concept, best, annual.unit) if best else None
+
+    def period_ending_before(self, concept: str, quarter_start: str | None, band: tuple[int, int],
+                             form: str | None = None, unit: str = "USD") -> SourcedValue | None:
+        """A period of `band` days (from any filing) that ends right before `quarter_start`."""
+        start_day = _parse_date(quarter_start)
+        if start_day is None:
             return None
-        cutoff = self.filing.filing_date
-        known = [x for x in matches if cutoff and (x.get("filed") or "") <= cutoff]
-        best = max(known or matches, key=lambda x: x.get("filed") or "")
-        return self._sourced(annual.concept, best, annual.unit)
+        low, high = band
+        matches = []
+        for fact in self._all_units(concept, unit):
+            start, end = _parse_date(fact.get("start")), _parse_date(fact.get("end"))
+            if (start and end and 1 <= (start_day - end).days <= PREVIOUS_PERIOD_GAP
+                    and low <= (end - start).days <= high and (form is None or fact.get("form") == form)):
+                matches.append(fact)
+        best = self._latest_known(matches)
+        return self._sourced(concept, best, unit) if best else None
 
     def ttm_net_income(self, tags: Iterable[str] = NET_INCOME_TAGS) -> dict[str, SourcedValue | None]:
         """Components of trailing-twelve-month net income (one concept for all parts).
