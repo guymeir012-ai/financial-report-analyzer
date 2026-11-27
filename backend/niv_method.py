@@ -5,12 +5,13 @@ written as amounts, and placement in the 7-stage growth-company model.
 Headline tagging, news and turning points are not computed here (see spec.md, task 7).
 """
 from dataclasses import dataclass, field
-from datetime import date
 from typing import Any
 
-REVENUE_TAGS = ("Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet")
+from backend import filings as f
+
+REVENUE_TAGS = f.REVENUE_TAGS
 COSTS_TAGS = ("CostsAndExpenses",)
-OPERATING_INCOME_TAGS = ("OperatingIncomeLoss",)
+OPERATING_INCOME_TAGS = f.OPERATING_INCOME_TAGS
 # Niv's "net income" is the consolidated line (incl. non-controlling interests), so ProfitLoss first.
 NET_INCOME_TAGS = ("ProfitLoss", "NetIncomeLoss")
 
@@ -85,6 +86,7 @@ class PeriodPL:
     operating_income: float | None
     net_income: float | None
     sources: dict[str, dict[str, Any]] = field(default_factory=dict)
+    end: str | None = None
 
 
 def stage_position(p: PeriodPL) -> int | None:
@@ -106,7 +108,8 @@ def classify_transition(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
     eff_prior = efficiency(prior.costs, prior.revenue)
     eff_current = efficiency(current.costs, current.revenue)
     double_digit = growth is not None and growth >= DOUBLE_DIGIT_GROWTH_PCT
-    more_efficient = eff_prior is not None and eff_current is not None and eff_current < eff_prior
+    efficiency_known = eff_prior is not None and eff_current is not None
+    more_efficient = efficiency_known and eff_current < eff_prior
     notes: list[str] = []
 
     from_stage = stage_position(prior)
@@ -130,9 +133,13 @@ def classify_transition(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
             to_stage = 5
         else:
             to_stage = 4 if more_efficient else 3
-        if to_stage >= 4 and not double_digit:
+        if to_stage >= 4 and growth is None:
+            notes.append("אין נתון צמיחה בהכנסות, אי אפשר לבדוק את תנאי השלב.")
+        elif to_stage >= 4 and not double_digit:
             notes.append("הצמיחה בהכנסות נמוכה מדו-ספרתית, תנאי השלב לא מתקיים במלואו.")
-        if to_stage >= 4 and not more_efficient:
+        if to_stage >= 4 and not efficiency_known:
+            notes.append("אין נתון התייעלות, אי אפשר לבדוק את תנאי השלב.")
+        elif to_stage >= 4 and not more_efficient:
             notes.append("אין התייעלות בהוצאות, תנאי השלב לא מתקיים במלואו.")
 
     verdict = None
@@ -160,92 +167,87 @@ def classify_transition(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
     }
 
 
-# ---------- pulling the P&L from EDGAR company facts ----------
+# ---------- pulling the P&L of one filing from EDGAR company facts ----------
 
-def _parse(d: str) -> date:
-    return date.fromisoformat(d)
+LINES = (("revenue", REVENUE_TAGS), ("costs", COSTS_TAGS),
+         ("operating_income", OPERATING_INCOME_TAGS), ("net_income", NET_INCOME_TAGS))
+Q4_DERIVED_HE = "שנה מלאה פחות תשעה חודשים"
+COSTS_DERIVED_HE = "הכנסות פחות רווח תפעולי"
+ROLE_PERIOD_HE = "התקופה"
+ROLE_FULL_YEAR_HE = "שנה מלאה"
+ROLE_NINE_MONTHS_HE = "תשעה חודשים ראשונים"
 
 
-def _days(e: dict[str, Any]) -> int:
-    return (_parse(e["end"]) - _parse(e["start"])).days
-
-
-def _find(facts: dict[str, Any], tags: tuple[str, ...], start: date, end: date) -> tuple[float, dict] | None:
-    gaap = facts.get("facts", {}).get("us-gaap", {})
+def _pair(ff: f.FilingFacts, tags: tuple[str, ...]) -> tuple[f.SourcedValue | None, f.SourcedValue | None]:
+    """(prior year, current) of the filing's own period, both from the same concept when possible."""
+    partial: tuple[f.SourcedValue | None, f.SourcedValue | None] = (None, None)
     for tag in tags:
-        for e in gaap.get(tag, {}).get("units", {}).get("USD", []):
-            if e.get("start") and _parse(e["start"]) == start and _parse(e["end"]) == end:
-                return e["val"], {"tag": tag, "accn": e.get("accn"), "form": e.get("form"),
-                                  "start": e["start"], "end": e["end"]}
-    return None
+        current, prior = ff.duration((tag,)), ff.duration((tag,), prior_year=True)
+        if current and prior:
+            return prior, current
+        if partial == (None, None) and (current or prior):
+            partial = (prior, current)
+    return partial
 
 
-def _fiscal_year_entry(facts: dict[str, Any], fiscal_year: int) -> dict[str, Any] | None:
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in REVENUE_TAGS:
-        for e in gaap.get(tag, {}).get("units", {}).get("USD", []):
-            if (e.get("form") == "10-K" and e.get("fy") == fiscal_year and e.get("start")
-                    and 350 <= _days(e) <= 380 and _parse(e["end"]).year in (fiscal_year, fiscal_year + 1)):
-                return e
-    return None
+def _value(sv: f.SourcedValue, role_he: str) -> dict[str, Any]:
+    return {"role_he": role_he, **sv.to_dict()}
 
 
-def _line(facts, tags, start, end, nine_month_end=None):
-    """A value for [start, end]; with nine_month_end, the fourth quarter = full year minus nine months."""
-    full = _find(facts, tags, start, end)
-    if full is None:
+def _direct(sv: f.SourcedValue | None) -> tuple[float | None, dict[str, Any] | None]:
+    if sv is None:
         return None, None
-    if nine_month_end is None:
-        return full
-    nine = _find(facts, tags, start, nine_month_end)
+    return sv.value, {"derived": None, "values": [_value(sv, ROLE_PERIOD_HE)]}
+
+
+def _fourth_quarter(ff: f.FilingFacts, annual: f.SourcedValue | None) -> tuple[float | None, dict[str, Any] | None]:
+    """Fourth quarter = full year minus the first nine months (the 10-K does not report it)."""
+    if annual is None:
+        return None, None
+    nine = ff.nine_months_of(annual)
     if nine is None:
         return None, None
-    value = full[0] - nine[0]
-    return value, {"tag": full[1]["tag"], "derived": "שנה מלאה פחות תשעה חודשים",
-                   "full_year": full[1], "nine_months": nine[1]}
+    return annual.value - nine.value, {
+        "derived": Q4_DERIVED_HE,
+        "values": [_value(annual, ROLE_FULL_YEAR_HE), _value(nine, ROLE_NINE_MONTHS_HE)],
+    }
 
 
-def _period(facts, label, start, end, nine_month_end=None) -> PeriodPL:
-    sources: dict[str, dict] = {}
-    values = {}
-    for key, tags in (("revenue", REVENUE_TAGS), ("costs", COSTS_TAGS),
-                      ("operating_income", OPERATING_INCOME_TAGS), ("net_income", NET_INCOME_TAGS)):
-        value, src = _line(facts, tags, start, end, nine_month_end)
-        values[key] = value
-        if src:
-            sources[key] = src
+def _period(label: str, picked: dict[str, tuple[float | None, dict[str, Any] | None]], end: str | None) -> PeriodPL:
+    values = {key: picked[key][0] for key, _ in LINES}
+    sources = {key: picked[key][1] for key, _ in LINES if picked[key][1]}
     if values["costs"] is None and values["revenue"] is not None and values["operating_income"] is not None:
         values["costs"] = values["revenue"] - values["operating_income"]
-        sources["costs"] = {"derived": "הכנסות פחות רווח תפעולי"}
-    return PeriodPL(label=label, sources=sources, **values)
+        sources["costs"] = {
+            "derived": COSTS_DERIVED_HE,
+            "values": sources["revenue"]["values"] + sources["operating_income"]["values"],
+        }
+    return PeriodPL(label=label, sources=sources, end=end, **values)
 
 
-def q4_report_periods(facts: dict[str, Any], fiscal_year: int) -> dict[str, tuple[PeriodPL, PeriodPL]] | None:
-    """For a Q4 (10-K) report: quarter vs same quarter last year, and year vs previous year."""
-    fy = _fiscal_year_entry(facts, fiscal_year)
-    if fy is None:
-        return None
-    start, end = _parse(fy["start"]), _parse(fy["end"])
-    prior_start = start.replace(year=start.year - 1)
-    prior_end = end.replace(year=end.year - 1)
-    nine_end = _nine_month_end(facts, start, end)
-    prior_nine_end = _nine_month_end(facts, prior_start, prior_end)
-    annual = (_period(facts, f"שנה {fiscal_year - 1}", prior_start, prior_end),
-              _period(facts, f"שנה {fiscal_year}", start, end))
-    quarter = None
-    if nine_end and prior_nine_end:
-        quarter = (_period(facts, f"רבעון 4 {fiscal_year - 1}", prior_start, prior_end, prior_nine_end),
-                   _period(facts, f"רבעון 4 {fiscal_year}", start, end, nine_end))
-    return {"annual": annual, "quarter": quarter}
+def _end_of(values: list[f.SourcedValue | None]) -> str | None:
+    return next((sv.end for sv in values if sv is not None), None)
 
 
-def _nine_month_end(facts, start: date, end: date) -> date | None:
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in REVENUE_TAGS:
-        for e in gaap.get(tag, {}).get("units", {}).get("USD", []):
-            if e.get("start") and _parse(e["start"]) == start and 260 <= _days(e) <= 285 and _parse(e["end"]) < end:
-                return _parse(e["end"])
-    return None
+def filing_periods(facts_json: dict[str, Any], filing: f.Filing) -> dict[str, tuple[PeriodPL, PeriodPL] | None]:
+    """The comparisons Niv reads in one report, each as (comparable period, current period).
+
+    10-Q: the quarter against the same quarter a year earlier.
+    10-K: the year against the previous year, and the fourth quarter against the same quarter
+    a year earlier (derived, because the 10-K reports the full year only).
+    """
+    ff = f.FilingFacts(facts_json, filing)
+    pairs = {key: _pair(ff, tags) for key, tags in LINES}
+    prior_end = _end_of([pairs[key][0] for key, _ in LINES])
+    current_end = _end_of([pairs[key][1] for key, _ in LINES])
+    own = (_period("prior", {k: _direct(v[0]) for k, v in pairs.items()}, prior_end),
+           _period("current", {k: _direct(v[1]) for k, v in pairs.items()}, current_end))
+    if filing.form != "10-K":
+        return {"quarter": own, "annual": None}
+    quarter = (_period("prior", {k: _fourth_quarter(ff, v[0]) for k, v in pairs.items()}, prior_end),
+               _period("current", {k: _fourth_quarter(ff, v[1]) for k, v in pairs.items()}, current_end))
+    has_quarter = any(p.revenue is not None or p.net_income is not None for p in quarter)
+    return {"quarter": quarter if has_quarter else None, "annual": own}
 
 
 def compare(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
@@ -253,6 +255,8 @@ def compare(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
     eff_p, eff_c = efficiency(prior.costs, prior.revenue), efficiency(current.costs, current.revenue)
     return {
         "periods": (prior.label, current.label),
+        "period_ends": (prior.end, current.end),
+        "values": {key: (getattr(prior, key), getattr(current, key)) for key, _ in LINES},
         "revenue_growth_pct": revenue_growth_pct(current.revenue, prior.revenue),
         "efficiency_prior": eff_p,
         "efficiency_current": eff_c,
@@ -263,7 +267,7 @@ def compare(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
     }
 
 
-# ---------- a Q4 report: both comparisons, highlights from either ----------
+# ---------- one report: every comparison it has, highlights from any of them ----------
 # Niv (answer of 22.11.2026): there is no fixed basis. A line such as a move from loss to profit
 # matters as part of the report whether it shows up in the quarterly or the annual comparison.
 
@@ -286,8 +290,8 @@ def turning_lines(prior: PeriodPL, current: PeriodPL) -> list[dict[str, Any]]:
     return found
 
 
-def q4_report_analysis(periods: dict[str, tuple[PeriodPL, PeriodPL] | None]) -> dict[str, Any]:
-    """Both comparisons side by side; no basis is chosen. Turning lines from either are flagged."""
+def report_analysis(periods: dict[str, tuple[PeriodPL, PeriodPL] | None]) -> dict[str, Any]:
+    """The comparisons side by side; no basis is chosen. Turning lines from any of them are flagged."""
     result: dict[str, Any] = {"comparisons": {}, "highlights": []}
     for basis in ("quarter", "annual"):
         pair = periods.get(basis)

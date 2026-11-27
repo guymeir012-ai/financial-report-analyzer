@@ -103,6 +103,73 @@
 <div class="alert alert-notice" role="note"><p>{{ s.notice_he }}</p></div>
 {% endif %}
 
+<section class="panel reading" id="reading" data-status="{{ n.status }}">
+  <div class="panel-head">
+    <h2>צמיחה, התייעלות ורווח</h2>
+    <p class="legend">מול התקופה המקבילה אשתקד. לחיצה על מספר מציגה את המקור שלו.</p>
+  </div>
+  {% if n.status != 'ok' %}
+  <p class="status reading-empty">{{ n.status_he }}</p>
+  {% else %}
+  {% if n.highlights %}
+  <ul class="highlights">
+    {% for h in n.highlights %}
+    <li class="highlight highlight-{{ h.direction }}" data-basis="{{ h.basis }}">{{ h.text_he }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% for c in n.comparisons %}
+  <div class="comparison" data-basis="{{ c.basis }}">
+    <h3>{{ c.title }}</h3>
+    <div class="stage" data-from="{{ c.stage.from if c.stage.from is not none else '' }}" data-to="{{ c.stage.to if c.stage.to is not none else '' }}">
+      <p class="stage-label">מודל שבעת השלבים של חברת צמיחה</p>
+      {% if not c.stage.known %}
+      <p class="stage-move status">אין נתונים למיקום במודל</p>
+      {% elif c.stage.moved %}
+      <p class="stage-move">משלב <bdi dir="ltr" class="num">{{ c.stage.from }}</bdi> לשלב <bdi dir="ltr" class="num">{{ c.stage.to }}</bdi></p>
+      {% elif c.stage.from is none %}
+      <p class="stage-move">שלב <bdi dir="ltr" class="num">{{ c.stage.to }}</bdi></p>
+      {% else %}
+      <p class="stage-move">נשארה בשלב <bdi dir="ltr" class="num">{{ c.stage.to }}</bdi></p>
+      {% endif %}
+      {% if c.stage.verdict_he %}<p class="stage-verdict">{{ c.stage.verdict_he }}</p>{% endif %}
+      {% if c.stage.to_he %}<p class="stage-desc">שלב <bdi dir="ltr" class="num">{{ c.stage.to }}</bdi>: {{ c.stage.to_he }}</p>{% endif %}
+      {% for note in c.stage.notes_he %}<p class="row-note">{{ note }}</p>{% endfor %}
+    </div>
+    <table class="ratio-table reading-table">
+      <thead>
+        <tr>
+          <th scope="col" class="col-name">שורה</th>
+          <th scope="col" class="col-val">תקופה מקבילה{% if c.prior_end %}<span class="col-sub">עד <bdi dir="ltr" class="num">{{ c.prior_end }}</bdi></span>{% endif %}</th>
+          <th scope="col" class="col-val">תקופה נוכחית{% if c.current_end %}<span class="col-sub">עד <bdi dir="ltr" class="num">{{ c.current_end }}</bdi></span>{% endif %}</th>
+          <th scope="col" class="col-change">שינוי</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in c.rows %}
+        <tr data-line="{{ r.key }}">
+          <th scope="row" class="name"><span class="name-he">{{ r.name }}</span><span class="name-en name-unit">{{ r.unit_he }}</span></th>
+          <td class="cell" data-label="תקופה מקבילה">{{ value_cell(r.prior) }}</td>
+          <td class="cell" data-label="תקופה נוכחית">{{ value_cell(r.current) }}</td>
+          <td class="cell change {{ r.change.tone or 'none' }}" data-label="שינוי">
+            {% if r.change.tone %}
+            <bdi dir="ltr" class="num"><span class="arrow" aria-hidden="true">{{ r.change.arrow }}</span> {{ r.change.text }}</bdi>
+            <span class="sr-only">{{ r.change.tone_he }}</span>
+            {% else %}
+            <span class="muted">{{ r.change.text }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if c.net_text_he %}<p class="net-text">{{ c.net_text_he }}.</p>{% endif %}
+  </div>
+  {% endfor %}
+  <p class="table-foot">צמיחה = הכנסות התקופה חלקי הכנסות התקופה המקבילה, פחות 1. התייעלות = עלות מכר ועוד הוצאות תפעול, חלקי ההכנסות: ירידה היא שינוי לטובה. רווח נקי מוצג בסכומים בלבד. כל החישובים בקוד, מתוך נתוני <bdi dir="ltr">XBRL</bdi> של SEC.</p>
+  {% endif %}
+</section>
+
 <section class="panel ratios">
   <div class="panel-head">
     <h2>יחסים פיננסיים</h2>

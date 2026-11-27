@@ -13,12 +13,13 @@ from backend.config import (
     get_tiingo_key,
 )
 from backend.prices import FinnhubClient, TiingoClient
+from backend.niv_method import filing_periods, report_analysis
 from backend.ratios import analyze, load_company
 from backend.sec_client import (
     InvalidTicker, SecClient, SecError, TickerNotFound,
 )
 from backend.valuation import build_valuation
-from backend.views import build_summary, build_valuation_view, filing_header
+from backend.views import build_niv_view, build_summary, build_valuation_view, filing_header
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +109,14 @@ def create_app(client: SecClient | None = None, finnhub: Any = _UNSET, tiingo: A
             log.exception("Valuation failed")
             return None
 
+    def report_reading_for(loaded: dict[str, Any], filing: dict[str, Any]) -> dict[str, Any]:
+        """View model of the report-reading section; a problem here never takes the ratios page down."""
+        try:
+            return build_niv_view(report_analysis(filing_periods(loaded["facts_json"], f.Filing(**filing))))
+        except Exception:  # noqa: BLE001 - logged, the section shows "unavailable"
+            log.exception("Report reading failed")
+            return build_niv_view(None)
+
     def is_api() -> bool:
         return request.path.startswith("/api/")
 
@@ -155,7 +164,8 @@ def create_app(client: SecClient | None = None, finnhub: Any = _UNSET, tiingo: A
         analysis = analyze(ticker, get_client(), loaded)
         s = build_summary(analysis)
         v = build_valuation_view(valuation_for(loaded), analysis["latest"]["filing"].get("report_date", ""))
-        return render_template("summary.html", s=s, v=v)
+        n = report_reading_for(loaded, analysis["latest"]["filing"])
+        return render_template("summary.html", s=s, v=v, n=n)
 
     # ---- JSON API ----
 

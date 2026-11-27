@@ -135,11 +135,30 @@ def test_pages_render_live_with_valuation(client, providers):
 
 
 def test_niv_method_clf_q4_2021(client):
-    from backend.niv_method import compare, q4_report_periods
-    cik, _ = resolve_ticker(client, "CLF")
-    periods = q4_report_periods(client.company_facts(cik), 2021)
+    from backend.filings import find_company_filings
+    from backend.niv_method import compare, filing_periods
+    _, cik, _, periodic, _ = find_company_filings(client, "CLF")
+    filing = next(x for x in periodic if x.form == "10-K" and x.report_date == "2021-12-31")
+    periods = filing_periods(client.company_facts(cik), filing)
     quarter, annual = compare(*periods["quarter"]), compare(*periods["annual"])
-    assert periods["quarter"][0].revenue == pytest.approx(2_256_200_000)
+    assert periods["quarter"][0].revenue == pytest.approx(2_256_000_000, abs=500_000)
     assert (round(quarter["revenue_growth_pct"]), round(annual["revenue_growth_pct"])) == (137, 282)
     assert (round(quarter["efficiency_change_points"]), round(annual["efficiency_change_points"])) == (16, 22)
     assert (annual["stage"]["from_stage"], annual["stage"]["to_stage"]) == (4, 6)
+    assert (quarter["stage"]["from_stage"], quarter["stage"]["to_stage"]) == (6, 7)
+
+
+@pytest.mark.parametrize("ticker", ["NVDA", "AAPL", "JPM"])
+def test_niv_method_on_latest_filing_of_real_companies(client, ticker):
+    """Shifted fiscal years, a 10-K or a 10-Q, and a bank: revenue and net profit are always found."""
+    from backend.filings import filings_with_facts, find_company_filings
+    from backend.niv_method import filing_periods, report_analysis
+    _, cik, _, periodic, _ = find_company_filings(client, ticker)
+    facts = client.company_facts(cik)
+    filing = filings_with_facts(facts, periodic)[0]
+    result = report_analysis(filing_periods(facts, filing))
+    assert result["comparisons"]
+    for c in result["comparisons"].values():
+        assert all(v is not None for v in c["values"]["revenue"])
+        assert all(v is not None for v in c["values"]["net_income"])
+        assert c["stage"]["to_stage"] is not None

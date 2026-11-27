@@ -6,6 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from backend import filings as f
+from backend.niv_method import ROLE_PERIOD_HE
 from backend.ratios import ITEMS_HE, UNAVAILABLE_HE
 from backend.valuation import relative
 
@@ -456,4 +457,123 @@ def build_valuation_view(val: dict[str, Any] | None, report_date: str) -> dict[s
         "history": history_view, "peers": peers_view, "bars": _scale_bars(bars),
         "explanation": [isolate_forms(s) for s in val.get("explanation_he") or []],
         "sic": val.get("sic"),
+    }
+
+
+# ---- report reading: growth, efficiency, net profit, 7-stage model ----
+
+NIV_BASIS_HE = {"quarter": "הרבעון מול הרבעון המקביל אשתקד", "annual": "השנה מול השנה הקודמת"}
+NIV_LINES_HE = {"revenue": "הכנסות", "costs": "עלות מכר והוצאות תפעול",
+                "operating_income": "רווח תפעולי", "net_income": "רווח נקי"}
+NIV_EFFICIENCY_FORMULA = "(Cost of sales + Operating expenses) / Revenue"
+NOT_REPORTED_CELL_HE = "לא דווח"
+
+
+def _niv_components(line: str, source: dict[str, Any] | None) -> list[dict[str, Any]]:
+    out = []
+    for v in (source or {}).get("values") or []:
+        value, unit_he = _xbrl_value(v)
+        tag = v.get("concept", "")
+        name, role = TAG_NAMES_HE.get(tag) or NIV_LINES_HE[line], v.get("role_he")
+        out.append({
+            "kind": "xbrl", "name_he": f"{name}, {role}" if role and role != ROLE_PERIOD_HE else name,
+            "tag": tag, "value": value, "unit_he": unit_he, "period": _period_text(v),
+            "form": v.get("form", ""), "accession": v.get("accession", ""),
+            "filed": format_date(v.get("filed")), "url": safe_sec_url(v.get("url")),
+        })
+    return out
+
+
+def _niv_cell(text: str | None, name_he: str, formula: str, parts: list[tuple[str, dict[str, Any] | None]]) -> dict[str, Any]:
+    """A clickable number with its source panel; `parts` = (line, source) pairs it was computed from."""
+    if text is None:
+        return {"kind": "status", "ok": False, "text": NOT_REPORTED_CELL_HE, "source": None}
+    components = [c for line, src in parts for c in _niv_components(line, src)]
+    notes = list(dict.fromkeys(src["derived"] for _, src in parts if src and src.get("derived")))
+    return {"kind": "value", "ok": True, "text": text, "source": {
+        "name_he": name_he, "formula": formula, "status": "ok", "status_he": "",
+        "note_he": None, "components": components, "missing": [],
+        "extra_he": [f"מחושב: {n}." for n in notes],
+    }}
+
+
+def _niv_change(delta: float | None, unit: str, good_when_positive: bool = True) -> dict[str, Any]:
+    if not _finite(delta):
+        return {"text": NO_CHANGE, "direction": None, "tone": None, "arrow": "", "tone_he": ""}
+    rounded = round(delta, 1)
+    if rounded == 0:
+        direction, tone, text = "flat", "neutral", f"0.0{unit}"
+    else:
+        direction = "up" if rounded > 0 else "down"
+        tone = "good" if (rounded > 0) == good_when_positive else "bad"
+        text = f"{rounded:+,.1f}{unit}"
+    return {"text": text, "direction": direction, "tone": tone,
+            "arrow": _ARROWS[direction], "tone_he": _TONE_HE[tone]}
+
+
+def _niv_stage(stage: dict[str, Any]) -> dict[str, Any]:
+    start, end = stage.get("from_stage"), stage.get("to_stage")
+    return {
+        "from": start, "to": end, "known": end is not None,
+        "moved": start is not None and end is not None and start != end,
+        "to_he": stage.get("to_stage_he"), "verdict_he": stage.get("verdict_he"),
+        "notes_he": list(stage.get("notes_he") or []),
+    }
+
+
+def _niv_comparison(basis: str, c: dict[str, Any]) -> dict[str, Any]:
+    prior_src, current_src = c["sources"]["prior"], c["sources"]["current"]
+    values = c["values"]
+
+    def amount(line: str, side: int) -> dict[str, Any]:
+        value = values[line][side]
+        src = (prior_src, current_src)[side].get(line)
+        return _niv_cell(format_millions(value) if _finite(value) else None, NIV_LINES_HE[line],
+                         (src or {}).get("values", [{}])[0].get("concept", ""), [(line, src)])
+
+    def eff(side: int) -> dict[str, Any]:
+        value = (c["efficiency_prior"], c["efficiency_current"])[side]
+        src = (prior_src, current_src)[side]
+        return _niv_cell(f"{value * 100:,.1f}%" if _finite(value) else None, "התייעלות", NIV_EFFICIENCY_FORMULA,
+                         [("costs", src.get("costs")), ("revenue", src.get("revenue"))])
+
+    growth = c["revenue_growth_pct"]
+    rows = [
+        {"key": "revenue", "name": NIV_LINES_HE["revenue"], "unit_he": "מיליוני דולר",
+         "prior": amount("revenue", 0), "current": amount("revenue", 1),
+         "change": _niv_change(growth, "%")},
+        {"key": "efficiency", "name": "התייעלות", "unit_he": "הוצאות חלקי הכנסות",
+         "prior": eff(0), "current": eff(1),
+         # the sign follows the ratio itself (it fell = spending less per dollar), the color says it is favorable
+         "change": _niv_change(-c["efficiency_change_points"] if _finite(c["efficiency_change_points"]) else None,
+                               " pp", good_when_positive=False)},
+        {"key": "operating_income", "name": NIV_LINES_HE["operating_income"], "unit_he": "מיליוני דולר",
+         "prior": amount("operating_income", 0), "current": amount("operating_income", 1),
+         "change": _niv_change(None, "")},
+        {"key": "net_income", "name": NIV_LINES_HE["net_income"], "unit_he": "מיליוני דולר",
+         "prior": amount("net_income", 0), "current": amount("net_income", 1),
+         "change": _niv_change(None, "")},
+    ]
+    prior_end, current_end = c.get("period_ends") or (None, None)
+    return {
+        "basis": basis, "title": NIV_BASIS_HE[basis],
+        "prior_end": format_date(prior_end), "current_end": format_date(current_end),
+        "stage": _niv_stage(c["stage"]), "rows": rows,
+        "net_text_he": (c.get("net_profit") or {}).get("text_he"),
+    }
+
+
+def build_niv_view(result: dict[str, Any] | None) -> dict[str, Any]:
+    """View model of the report-reading section; `result` is `report_analysis()` output or None."""
+    if result is None:
+        return {"status": "unavailable", "status_he": UNAVAILABLE_HE, "comparisons": [], "highlights": []}
+    comparisons = [_niv_comparison(basis, c) for basis, c in result["comparisons"].items()]
+    has_data = any(cell["ok"] for comp in comparisons for row in comp["rows"]
+                   for cell in (row["prior"], row["current"]))
+    if not has_data:
+        return {"status": "empty", "status_he": NOT_REPORTED_CELL_HE, "comparisons": [], "highlights": []}
+    return {
+        "status": "ok", "status_he": "", "comparisons": comparisons,
+        "highlights": [{"text_he": h["text_he"], "direction": h["direction"], "basis": h["basis"]}
+                       for h in result["highlights"]],
     }

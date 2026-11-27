@@ -474,3 +474,209 @@ def test_api_valuation_json(nvda_client):
 def test_api_valuation_without_keys_is_unavailable_not_an_error(nvda_client):
     body = create_app(nvda_client).test_client().get("/api/valuation/NVDA").get_json()
     assert body["current"]["status"] == "unavailable" and body["history"]["status"] == "unavailable"
+
+
+# ---------- report reading: growth, efficiency, profit, 7-stage model ----------
+
+from pathlib import Path  # noqa: E402
+
+CLF_10K = "0000764065-22-000037"
+
+
+def reading(html: str) -> str:
+    return re.search(r'<section class="panel reading".*?</section>', html, re.S).group(0)
+
+
+def comparison(html: str, basis: str) -> str:
+    return re.search(rf'<div class="comparison" data-basis="{basis}">.*?</table>', reading(html), re.S).group(0)
+
+
+def line(block: str, key: str) -> str:
+    return re.search(rf'<tr data-line="{key}">.*?</tr>', block, re.S).group(0)
+
+
+def clf_client():
+    """CLF's 2021 annual report, served through the fake SEC session."""
+    facts = json.loads((Path(__file__).parent / "fixtures" / "clf_companyfacts_min.json").read_text())
+    subs = {"name": "CLEVELAND-CLIFFS INC.", "sic": "1000", "filings": {"recent": {
+        "accessionNumber": [CLF_10K], "filingDate": ["2022-02-11"], "reportDate": ["2021-12-31"],
+        "form": ["10-K"], "primaryDocument": ["clf-20211231.htm"]}}}
+    return make_client(subs, facts)
+
+
+def test_reading_section_on_a_quarterly_report(http):
+    resp = http.get("/summary/NVDA")
+    html = text_of(resp)
+    block = reading(html)
+    assert 'data-status="ok"' in block and "צמיחה, התייעלות ורווח" in block
+    # a 10-Q has the quarterly comparison only
+    assert block.count('<div class="comparison"') == 1 and 'data-basis="annual"' not in block
+    q = comparison(html, "quarter")
+    assert 'data-from="6" data-to="7"' in q
+    assert re.search(r'משלב <bdi dir="ltr" class="num">6</bdi> לשלב <bdi dir="ltr" class="num">7</bdi>', q)
+    revenue = line(q, "revenue")
+    assert ">46,743<" in revenue and ">96,221<" in revenue and "+105.9%" in revenue and "change good" in revenue
+    efficiency = line(q, "efficiency")
+    assert ">39.2%<" in efficiency and ">33.8%<" in efficiency and "-5.4 pp" in efficiency and "change good" in efficiency and "▼" in efficiency
+    net = line(q, "net_income")
+    assert ">26,422<" in net and ">59,688<" in net and "%" not in net
+    assert "מעבר מרווח נקי של 26.4 מיליארד דולר לרווח נקי של 59.7 מיליארד דולר." in block
+    assert '<ul class="highlights">' not in block
+    assert html.index('class="panel reading"') < html.index('class="panel ratios"')
+    assert_clean(resp)
+
+
+def test_reading_section_sources_link_to_sec(http):
+    q = comparison(text_of(http.get("/summary/NVDA")), "quarter")
+    revenue = line(q, "revenue")
+    assert revenue.count('<details class="src"') == 2 and LATEST_ACCN in revenue
+    assert "הדוח ב-SEC" in revenue
+    assert "מחושב: הכנסות פחות רווח תפעולי." in line(q, "efficiency")
+
+
+def test_reading_section_on_an_annual_report_shows_both_comparisons(fake_time):
+    resp = page(clf_client(), "/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200
+    block = reading(html)
+    assert block.count('<div class="comparison"') == 2
+    assert block.index('class="comparison" data-basis="quarter"') < block.index('class="comparison" data-basis="annual"')
+    assert 'data-from="6" data-to="7"' in comparison(html, "quarter")
+    annual = comparison(html, "annual")
+    assert 'data-from="4" data-to="6"' in annual and "קפיצה של 2 שלבים בבת אחת." in annual
+    assert ">102.7%<" in line(annual, "efficiency") and ">80.4%<" in line(annual, "efficiency")
+    assert "+281.8%" in line(annual, "revenue")
+    highlight = re.search(r'<li class="highlight highlight-up" data-basis="annual">(.*?)</li>', block).group(1)
+    assert highlight == "מעבר מהפסד נקי של 81 מיליון דולר לרווח נקי של 3 מיליארד דולר בהשוואה השנתית."
+    # the fourth quarter is derived, and the panel says from what
+    assert "מחושב: שנה מלאה פחות תשעה חודשים." in line(comparison(html, "quarter"), "revenue")
+    assert_clean(resp)
+
+
+def losing_facts(nvda_facts, current_operating=None, current_net=None):
+    """NVDA's latest quarter turned into a loss in both years; the current quarter can be set."""
+    facts = copy.deepcopy(nvda_facts)
+    gaap = facts["facts"]["us-gaap"]
+    for tag, current in (("OperatingIncomeLoss", current_operating), ("NetIncomeLoss", current_net)):
+        for fact in gaap[tag]["units"]["USD"]:
+            if fact["accn"] != LATEST_ACCN:
+                continue
+            fact["val"] = -abs(fact["val"])
+            if current is not None and (fact["start"], fact["end"]) == ("2026-04-27", "2026-07-26"):
+                fact["val"] = current
+    return facts
+
+
+def test_reading_same_stage_is_shown_as_staying(nvda_submissions, nvda_facts):
+    # still losing money, but spending less per dollar of revenue: stage 4 in both years
+    facts = losing_facts(nvda_facts, current_operating=-10_000_000_000, current_net=-8_000_000_000)
+    html = text_of(page(make_client(nvda_submissions, facts), "/summary/NVDA"))
+    q = comparison(html, "quarter")
+    assert 'data-from="4" data-to="4"' in q
+    assert re.search(r'נשארה בשלב <bdi dir="ltr" class="num">4</bdi>', q) and "משלב" not in q
+    assert "ירידה או עמידה באותו שלב: לא מעניינת ללונג" in q
+    assert "מעבר מהפסד נקי של 26.4 מיליארד דולר להפסד נקי של 8 מיליארד דולר." in reading(html)
+    assert '<ul class="highlights">' not in reading(html)
+
+
+def test_reading_going_down_a_stage(nvda_submissions, nvda_facts):
+    # losing money and spending more per dollar of revenue than a year earlier: from stage 4 down to 3
+    html = text_of(page(make_client(nvda_submissions, losing_facts(nvda_facts)), "/summary/NVDA"))
+    q = comparison(html, "quarter")
+    assert 'data-from="4" data-to="3"' in q
+    assert re.search(r'משלב <bdi dir="ltr" class="num">4</bdi> לשלב <bdi dir="ltr" class="num">3</bdi>', q)
+    assert "לא מעניינת ללונג" in q and "change bad" in line(q, "efficiency")
+
+
+def test_reading_turn_to_a_loss_is_highlighted(nvda_submissions, nvda_facts):
+    facts = copy.deepcopy(nvda_facts)
+    for fact in facts["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]:
+        if fact["accn"] == LATEST_ACCN and (fact["start"], fact["end"]) == ("2026-04-27", "2026-07-26"):
+            fact["val"] = -2_000_000_000
+    block = reading(text_of(page(make_client(nvda_submissions, facts), "/summary/NVDA")))
+    assert ('<li class="highlight highlight-down" data-basis="quarter">'
+            "מעבר מרווח נקי של 26.4 מיליארד דולר להפסד נקי של 2 מיליארד דולר בהשוואה הרבעונית.</li>") in block
+
+
+def test_reading_missing_lines_show_not_reported(nvda_submissions, nvda_facts):
+    facts = copy.deepcopy(nvda_facts)
+    del facts["facts"]["us-gaap"]["OperatingIncomeLoss"]
+    resp = page(make_client(nvda_submissions, facts), "/summary/NVDA")
+    q = comparison(text_of(resp), "quarter")
+    assert line(q, "efficiency").count("לא דווח") == 2 and line(q, "operating_income").count("לא דווח") == 2
+    assert ">96,221<" in line(q, "revenue")
+    assert "אין נתון התייעלות, אי אפשר לבדוק את תנאי השלב." in q
+    assert_clean(resp)
+
+
+def test_reading_without_any_facts_says_not_reported(nvda_submissions):
+    resp = page(make_client(nvda_submissions, {"facts": {"us-gaap": {}}}), "/summary/NVDA")
+    block = reading(text_of(resp))
+    assert resp.status_code == 200
+    assert 'data-status="empty"' in block and "לא דווח" in block and "<table" not in block
+
+
+def test_reading_crash_never_breaks_the_page(nvda_client, monkeypatch, caplog):
+    import backend.app as app_module
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("secret-internal-detail")
+
+    monkeypatch.setattr(app_module, "filing_periods", boom)
+    resp = create_app(nvda_client).test_client().get("/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200 and html.count('<tr data-key=') == 9
+    assert 'data-status="unavailable"' in reading(html) and "לא זמין כרגע" in reading(html)
+    assert "secret-internal-detail" not in html and "Report reading failed" in caplog.text
+    assert_clean(resp)
+
+
+def test_reading_view_crash_never_breaks_the_page(nvda_client, monkeypatch, caplog):
+    import backend.app as app_module
+
+    real = app_module.build_niv_view
+
+    def boom(result):
+        if result is not None:
+            raise OverflowError("secret-internal-detail")
+        return real(result)
+
+    monkeypatch.setattr(app_module, "build_niv_view", boom)
+    resp = create_app(nvda_client).test_client().get("/summary/NVDA")
+    html = text_of(resp)
+    assert resp.status_code == 200 and 'data-status="unavailable"' in reading(html)
+    assert "secret-internal-detail" not in html and "Report reading failed" in caplog.text
+
+
+def test_reading_survives_absurd_numbers_in_the_facts(nvda_submissions, nvda_facts):
+    facts = copy.deepcopy(nvda_facts)
+    for tag in ("Revenues", "NetIncomeLoss", "OperatingIncomeLoss"):
+        for fact in facts["facts"]["us-gaap"][tag]["units"]["USD"]:
+            if fact["accn"] == LATEST_ACCN and (fact["start"], fact["end"]) == ("2026-04-27", "2026-07-26"):
+                fact["val"] = 1e308
+    resp = page(make_client(nvda_submissions, facts), "/summary/NVDA")
+    assert resp.status_code == 200 and html_has_reading(text_of(resp))
+    assert_clean(resp)
+
+
+def html_has_reading(html: str) -> bool:
+    return 'class="panel reading"' in html and html.count('<tr data-key=') == 9
+
+
+def test_reading_escapes_whatever_comes_from_the_facts(nvda_submissions, nvda_facts):
+    facts = copy.deepcopy(nvda_facts)
+    for fact in facts["facts"]["us-gaap"]["Revenues"]["units"]["USD"]:
+        if fact["accn"] == LATEST_ACCN:
+            fact["form"] = XSS
+            fact["filed"] = XSS
+    resp = page(make_client(nvda_submissions, facts), "/summary/NVDA")
+    assert XSS not in text_of(resp)
+    assert_clean(resp)
+
+
+def test_reading_has_no_inline_styles_scripts_or_foreign_links(fake_time):
+    html = text_of(page(clf_client(), "/summary/NVDA"))
+    block = reading(html)
+    assert " style=" not in block and "<script" not in block
+    assert all(url.startswith("https://www.sec.gov/") for url in SEC_LINK.findall(block))
+    assert not any(w in html for w in FORBIDDEN_WORDS)
