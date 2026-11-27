@@ -250,6 +250,13 @@ p { margin: 0; }
 .stage-desc { margin-top: 6px; color: var(--text-dim); font-size: 13.5px; }
 .name-unit { font-family: var(--font-ui); }
 .net-text { padding: 12px 28px 4px; color: var(--text); font-size: 15px; }
+.prev-quarter {
+  margin: 12px 28px 4px; padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
+  background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px;
+}
+.prev-label { flex: 1 1 240px; font-weight: 500; font-size: 15px; }
+.prev-sub { display: block; color: var(--muted); font-size: 12.5px; font-weight: 400; margin-top: 1px; }
+.prev-value .num { font-size: 16px; }
 
 /* ---- valuation ---- */
 .valuation { margin-top: 20px; }
@@ -315,7 +322,7 @@ p { margin: 0; }
   .ratio-table td.cell { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .ratio-table td.cell::before { content: attr(data-label); color: var(--muted); font-size: 13px; }
   .val-body { padding: 4px 20px 20px; }
-  .highlights, .stage { margin-inline: 20px; }
+  .highlights, .stage, .prev-quarter { margin-inline: 20px; }
   .comparison h3, .net-text, .reading-empty { padding-inline: 20px; }
   .bar { grid-template-columns: 1fr; gap: 4px; }
   .bar-value { text-align: start; }

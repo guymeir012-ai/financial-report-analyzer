@@ -5,6 +5,7 @@ written as amounts, and placement in the 7-stage growth-company model.
 Headline tagging, news and turning points are not computed here (see spec.md, task 7).
 """
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any
 
 from backend import filings as f
@@ -14,6 +15,10 @@ COSTS_TAGS = ("CostsAndExpenses",)
 OPERATING_INCOME_TAGS = f.OPERATING_INCOME_TAGS
 # Niv's "net income" is the consolidated line (incl. non-controlling interests), so ProfitLoss first.
 NET_INCOME_TAGS = ("ProfitLoss", "NetIncomeLoss")
+
+# Niv's efficiency adds cost of sales to operating expenses only when the total does not include it already.
+COST_OF_SALES_TAGS = f.COST_TAGS
+OPERATING_EXPENSES_TAGS = ("OperatingExpenses",)
 
 DOUBLE_DIGIT_GROWTH_PCT = 10.0
 
@@ -35,6 +40,14 @@ def revenue_growth_pct(current: float | None, prior: float | None) -> float | No
     if current is None or prior is None or prior <= 0:
         return None
     return (current / prior - 1) * 100
+
+
+def guidance_growth_pct(guidance: float | None, current_revenue: float | None) -> float | None:
+    """(next-quarter revenue guidance / current-quarter revenue - 1) * 100, as Niv computes it.
+
+    The guidance is compared with the quarter just reported, never with the same quarter a year earlier.
+    """
+    return revenue_growth_pct(guidance, current_revenue)
 
 
 def efficiency(costs: float | None, revenue: float | None) -> float | None:
@@ -171,9 +184,16 @@ def classify_transition(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
 
 LINES = (("revenue", REVENUE_TAGS), ("costs", COSTS_TAGS),
          ("operating_income", OPERATING_INCOME_TAGS), ("net_income", NET_INCOME_TAGS))
+# Read from the filing as well, only to build the costs line when there is no total.
+PICKED_LINES = LINES + (("cost_of_sales", COST_OF_SALES_TAGS), ("operating_expenses", OPERATING_EXPENSES_TAGS))
 Q4_DERIVED_HE = "שנה מלאה פחות תשעה חודשים"
 COSTS_DERIVED_HE = "הכנסות פחות רווח תפעולי"
+COSTS_SUM_HE = "עלות מכר ועוד הוצאות תפעול"
+COSTS_IN_OPEX_HE = "הוצאות התפעול כבר כוללות את עלות המכר"
+# The two ways of adding up the costs must agree with revenue minus operating income within this share of revenue.
+COSTS_TOLERANCE = 0.005
 ROLE_PERIOD_HE = "התקופה"
+ROLE_PREVIOUS_QUARTER_HE = "הרבעון הקודם"
 ROLE_FULL_YEAR_HE = "שנה מלאה"
 ROLE_NINE_MONTHS_HE = "תשעה חודשים ראשונים"
 
@@ -213,15 +233,38 @@ def _fourth_quarter(ff: f.FilingFacts, annual: f.SourcedValue | None) -> tuple[f
     }
 
 
-def _period(label: str, picked: dict[str, tuple[float | None, dict[str, Any] | None]], end: str | None) -> PeriodPL:
+Picked = dict[str, tuple[float | None, dict[str, Any] | None]]
+
+
+def _costs(picked: Picked) -> tuple[float | None, dict[str, Any] | None]:
+    """Cost of sales plus operating expenses, without counting the cost of sales twice.
+
+    A reported total is used as is. Otherwise the two lines are added up only when the sum agrees with
+    revenue minus operating income; operating expenses alone are used when they already agree with it
+    (the company folds the cost of sales into them); anything else falls back to that difference.
+    Without an operating-income line the inclusion cannot be checked, so nothing is guessed.
+    """
+    if picked["costs"][0] is not None:
+        return picked["costs"]
+    (revenue, revenue_src), (operating, operating_src) = picked["revenue"], picked["operating_income"]
+    if revenue is None or operating is None:
+        return None, None
+    expected = revenue - operating
+    tolerance = abs(revenue) * COSTS_TOLERANCE
+    (sales, sales_src), (opex, opex_src) = picked["cost_of_sales"], picked["operating_expenses"]
+    if sales is not None and opex is not None and abs(sales + opex - expected) <= tolerance:
+        return sales + opex, {"derived": COSTS_SUM_HE, "values": sales_src["values"] + opex_src["values"]}
+    if opex is not None and abs(opex - expected) <= tolerance:
+        return opex, {"derived": COSTS_IN_OPEX_HE, "values": opex_src["values"]}
+    return expected, {"derived": COSTS_DERIVED_HE, "values": revenue_src["values"] + operating_src["values"]}
+
+
+def _period(label: str, picked: Picked, end: str | None) -> PeriodPL:
     values = {key: picked[key][0] for key, _ in LINES}
     sources = {key: picked[key][1] for key, _ in LINES if picked[key][1]}
-    if values["costs"] is None and values["revenue"] is not None and values["operating_income"] is not None:
-        values["costs"] = values["revenue"] - values["operating_income"]
-        sources["costs"] = {
-            "derived": COSTS_DERIVED_HE,
-            "values": sources["revenue"]["values"] + sources["operating_income"]["values"],
-        }
+    values["costs"], costs_source = _costs(picked)
+    if costs_source:
+        sources["costs"] = costs_source
     return PeriodPL(label=label, sources=sources, end=end, **values)
 
 
@@ -229,25 +272,61 @@ def _end_of(values: list[f.SourcedValue | None]) -> str | None:
     return next((sv.end for sv in values if sv is not None), None)
 
 
-def filing_periods(facts_json: dict[str, Any], filing: f.Filing) -> dict[str, tuple[PeriodPL, PeriodPL] | None]:
+def _quarter_start(source: dict[str, Any] | None) -> str | None:
+    """First day of the quarter a revenue source describes (the day after the nine months, when derived)."""
+    values = (source or {}).get("values") or []
+    if not values:
+        return None
+    if source.get("derived") == Q4_DERIVED_HE and len(values) > 1:
+        nine_end = date.fromisoformat(values[1]["end"])
+        return (nine_end + timedelta(days=1)).isoformat()
+    return values[0].get("start")
+
+
+def _previous_quarter(ff: f.FilingFacts, current: PeriodPL) -> dict[str, Any] | None:
+    """Revenue of the quarter right before the current one, kept apart from the same-quarter comparison.
+
+    Reported directly when that quarter had its own 10-Q; when it was a fourth quarter it is
+    the full year minus the first nine months.
+    """
+    source = current.sources.get("revenue")
+    start = _quarter_start(source)
+    if start is None:
+        return None
+    concept = source["values"][0]["concept"]
+    for tag in (concept, *(t for t in REVENUE_TAGS if t != concept)):
+        direct = ff.period_ending_before(tag, start, f.PERIOD_BANDS["10-Q"])
+        if direct:
+            return {"revenue": direct.value, "end": direct.end,
+                    "source": {"derived": None, "values": [_value(direct, ROLE_PREVIOUS_QUARTER_HE)]}}
+        annual = ff.period_ending_before(tag, start, f.PERIOD_BANDS["10-K"], form="10-K")
+        value, derived = _fourth_quarter(ff, annual)
+        if value is not None:
+            return {"revenue": value, "end": annual.end, "source": derived}
+    return None
+
+
+def filing_periods(facts_json: dict[str, Any], filing: f.Filing) -> dict[str, Any]:
     """The comparisons Niv reads in one report, each as (comparable period, current period).
 
     10-Q: the quarter against the same quarter a year earlier.
     10-K: the year against the previous year, and the fourth quarter against the same quarter
     a year earlier (derived, because the 10-K reports the full year only).
+    "previous_quarter" holds the revenue of the quarter right before the current one, or None.
     """
     ff = f.FilingFacts(facts_json, filing)
-    pairs = {key: _pair(ff, tags) for key, tags in LINES}
+    pairs = {key: _pair(ff, tags) for key, tags in PICKED_LINES}
     prior_end = _end_of([pairs[key][0] for key, _ in LINES])
     current_end = _end_of([pairs[key][1] for key, _ in LINES])
     own = (_period("prior", {k: _direct(v[0]) for k, v in pairs.items()}, prior_end),
            _period("current", {k: _direct(v[1]) for k, v in pairs.items()}, current_end))
     if filing.form != "10-K":
-        return {"quarter": own, "annual": None}
+        return {"quarter": own, "annual": None, "previous_quarter": _previous_quarter(ff, own[1])}
     quarter = (_period("prior", {k: _fourth_quarter(ff, v[0]) for k, v in pairs.items()}, prior_end),
                _period("current", {k: _fourth_quarter(ff, v[1]) for k, v in pairs.items()}, current_end))
     has_quarter = any(p.revenue is not None or p.net_income is not None for p in quarter)
-    return {"quarter": quarter if has_quarter else None, "annual": own}
+    return {"quarter": quarter if has_quarter else None, "annual": own,
+            "previous_quarter": _previous_quarter(ff, quarter[1]) if has_quarter else None}
 
 
 def compare(prior: PeriodPL, current: PeriodPL) -> dict[str, Any]:
@@ -290,7 +369,7 @@ def turning_lines(prior: PeriodPL, current: PeriodPL) -> list[dict[str, Any]]:
     return found
 
 
-def report_analysis(periods: dict[str, tuple[PeriodPL, PeriodPL] | None]) -> dict[str, Any]:
+def report_analysis(periods: dict[str, Any]) -> dict[str, Any]:
     """The comparisons side by side; no basis is chosen. Turning lines from any of them are flagged."""
     result: dict[str, Any] = {"comparisons": {}, "highlights": []}
     for basis in ("quarter", "annual"):
@@ -298,6 +377,12 @@ def report_analysis(periods: dict[str, tuple[PeriodPL, PeriodPL] | None]) -> dic
         if pair is None:
             continue
         result["comparisons"][basis] = compare(*pair)
+        previous = periods.get("previous_quarter") if basis == "quarter" else None
+        if previous:
+            # kept apart from the same-quarter numbers: a different comparison, never mixed into the stage
+            result["comparisons"][basis]["previous_quarter"] = {
+                **previous, "revenue_growth_pct": revenue_growth_pct(pair[1].revenue, previous["revenue"]),
+            }
         for t in turning_lines(*pair):
             result["highlights"].append({**t, "basis": basis,
                                          "text_he": f"{t['text_he']} {_BASIS_HE[basis]}."})

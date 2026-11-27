@@ -36,6 +36,7 @@ TAG_NAMES_HE: dict[str, str] = {
     **{t: ITEMS_HE["gross_profit"] for t in f.GROSS_PROFIT_TAGS},
     **{t: "עלות ההכנסות" for t in f.COST_TAGS},
     **{t: ITEMS_HE["operating_income"] for t in f.OPERATING_INCOME_TAGS},
+    "OperatingExpenses": "הוצאות תפעול",
     **{t: ITEMS_HE["net_income"] for t in f.NET_INCOME_TAGS},
     **{t: ITEMS_HE["equity"] for t in f.EQUITY_TAGS},
     **{t: ITEMS_HE["assets"] for t in f.ASSETS_TAGS},
@@ -555,8 +556,18 @@ def _niv_comparison(basis: str, c: dict[str, Any]) -> dict[str, Any]:
          "change": _niv_change(None, "")},
     ]
     prior_end, current_end = c.get("period_ends") or (None, None)
+    previous = None
+    pq = c.get("previous_quarter")
+    if pq and _finite(pq.get("revenue")):
+        source = pq.get("source")
+        previous = {
+            "end": format_date(pq.get("end")),
+            "revenue": _niv_cell(format_millions(pq["revenue"]), "הכנסות הרבעון הקודם",
+                                 (source or {}).get("values", [{}])[0].get("concept", ""), [("revenue", source)]),
+            "change": _niv_change(pq.get("revenue_growth_pct"), "%"),
+        }
     return {
-        "basis": basis, "title": NIV_BASIS_HE[basis],
+        "basis": basis, "title": NIV_BASIS_HE[basis], "previous_quarter": previous,
         "prior_end": format_date(prior_end), "current_end": format_date(current_end),
         "stage": _niv_stage(c["stage"]), "rows": rows,
         "net_text_he": (c.get("net_profit") or {}).get("text_he"),

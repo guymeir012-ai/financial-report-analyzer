@@ -296,3 +296,178 @@ def test_no_turn_and_missing_quarter():
     assert turning_lines(p(100, 80, None, None), p(120, 90, 30, 20)) == []
     r = report_analysis({"annual": (p(100, 80, 20, 10), p(120, 90, 30, 20)), "quarter": None})
     assert list(r["comparisons"]) == ["annual"] and r["highlights"] == []
+
+
+# ---------- golden test: Nvidia Q1 FY2024, Niv's numbers from lesson 14 ----------
+# The stage of this report is deliberately not asserted: it depends on questions still open with Niv.
+
+NVDA_Q1_FY24 = "0001045810-23-000093"
+
+
+def nvda_q1_filing():
+    return make_filing(form="10-Q", accession=NVDA_Q1_FY24, report_date="2023-04-30",
+                       filing_date="2023-05-26", cik=1045810, doc="nvda-20230430.htm")
+
+
+@pytest.fixture(scope="module")
+def nvda_q1():
+    facts = json.loads((FIXTURES / "nvda_q1fy24_companyfacts_min.json").read_text())
+    return report_analysis(filing_periods(facts, nvda_q1_filing()))["comparisons"]["quarter"]
+
+
+def test_nvda_revenue_against_the_same_quarter(nvda_q1):
+    assert nvda_q1["values"]["revenue"] == (8_288_000_000, 7_192_000_000)
+    assert round(nvda_q1["revenue_growth_pct"], 1) == -13.2
+    assert nvda_q1["period_ends"] == ("2022-05-01", "2023-04-30")
+
+
+def test_nvda_revenue_against_the_previous_quarter(nvda_q1):
+    previous = nvda_q1["previous_quarter"]
+    # the previous quarter was a fourth quarter: full year 26,974 minus nine months 20,923
+    assert previous["revenue"] == 6_051_000_000 and previous["end"] == "2023-01-29"
+    assert round(previous["revenue_growth_pct"], 1) == 18.9
+    full, nine = previous["source"]["values"]
+    assert previous["source"]["derived"] == "שנה מלאה פחות תשעה חודשים"
+    assert (full["form"], full["value"], nine["form"], nine["value"]) == ("10-K", 26_974_000_000, "10-Q", 20_923_000_000)
+
+
+def test_nvda_efficiency_adds_cost_of_sales_to_operating_expenses(nvda_q1):
+    # (2,857 + 3,563) / 8,288 = 77 cents, against (2,544 + 2,508) / 7,192 = 70 cents
+    assert nvda_q1["values"]["costs"] == (2_857_000_000 + 3_563_000_000, 2_544_000_000 + 2_508_000_000)
+    assert round(nvda_q1["efficiency_prior"] * 100) == 77
+    assert round(nvda_q1["efficiency_current"] * 100) == 70
+    assert round(nvda_q1["efficiency_change_points"]) == 7
+    source = nvda_q1["sources"]["current"]["costs"]
+    assert source["derived"] == "עלות מכר ועוד הוצאות תפעול"
+    assert [v["concept"] for v in source["values"]] == ["CostOfRevenue", "OperatingExpenses"]
+
+
+def test_nvda_operating_expenses_are_taken_as_reported(nvda_q1):
+    # the comparable quarter's 3,563 includes a one-time charge; nothing is adjusted (open question for Niv)
+    assert nvda_q1["sources"]["prior"]["costs"]["values"][1]["value"] == 3_563_000_000
+
+
+def test_nvda_net_profit(nvda_q1):
+    assert nvda_q1["values"]["net_income"] == (1_618_000_000, 2_043_000_000)
+    assert nvda_q1["net_profit"]["text_he"] == "מעבר מרווח נקי של 1.6 מיליארד דולר לרווח נקי של 2 מיליארד דולר"
+
+
+def test_nvda_guidance_growth(nvda_q1):
+    from backend.niv_method import guidance_growth_pct
+
+    current_revenue = nvda_q1["values"]["revenue"][1]
+    assert round(guidance_growth_pct(11_000_000_000, current_revenue)) == 53
+
+
+# ---------- guidance growth ----------
+
+def test_guidance_growth_formula_and_gaps():
+    from backend.niv_method import guidance_growth_pct
+
+    assert guidance_growth_pct(900_000, 1_000_000) == pytest.approx(-10)
+    assert guidance_growth_pct(1_000_000, 1_000_000) == pytest.approx(0)
+    for guidance, revenue in ((None, 100), (100, None), (100, 0), (100, -5)):
+        assert guidance_growth_pct(guidance, revenue) is None
+
+
+# ---------- the costs line: never count the cost of sales twice ----------
+
+def quarter_facts(rows):
+    accn = "0000000001-26-000001"
+    full = []
+    for tag, current, prior in rows:
+        if current is not None:
+            full.append((tag, "2026-04-01", "2026-06-30", current))
+        if prior is not None:
+            full.append((tag, "2025-04-01", "2025-06-30", prior))
+    return filing_periods(make_facts(accn, full), make_filing(accession=accn))["quarter"]
+
+
+def test_costs_are_the_sum_when_it_agrees_with_operating_income():
+    prior, current = quarter_facts([("Revenues", 1000e6, 800e6), ("CostOfRevenue", 400e6, 350e6),
+                                    ("OperatingExpenses", 300e6, 300e6), ("OperatingIncomeLoss", 300e6, 150e6)])
+    assert (prior.costs, current.costs) == (650e6, 700e6)
+    assert current.sources["costs"]["derived"] == "עלות מכר ועוד הוצאות תפעול"
+
+
+def test_costs_are_operating_expenses_alone_when_they_include_the_cost_of_sales():
+    _, current = quarter_facts([("Revenues", 1000e6, 800e6), ("CostOfRevenue", 400e6, 350e6),
+                                ("OperatingExpenses", 700e6, 650e6), ("OperatingIncomeLoss", 300e6, 150e6)])
+    assert current.costs == 700e6
+    assert current.sources["costs"]["derived"] == "הוצאות התפעול כבר כוללות את עלות המכר"
+    assert [v["concept"] for v in current.sources["costs"]["values"]] == ["OperatingExpenses"]
+
+
+def test_costs_fall_back_to_the_difference_when_the_lines_do_not_add_up():
+    # another operating item sits between the two lines and operating income
+    _, current = quarter_facts([("Revenues", 1000e6, 800e6), ("CostOfRevenue", 400e6, 350e6),
+                                ("OperatingExpenses", 250e6, 250e6), ("OperatingIncomeLoss", 300e6, 150e6)])
+    assert current.costs == 700e6
+    assert current.sources["costs"]["derived"] == "הכנסות פחות רווח תפעולי"
+
+
+def test_costs_are_not_guessed_without_an_operating_income_line():
+    prior, current = quarter_facts([("Revenues", 1000e6, 800e6), ("CostOfRevenue", 400e6, 350e6),
+                                    ("OperatingExpenses", 300e6, 300e6), ("NetIncomeLoss", 50e6, 20e6)])
+    assert prior.costs is None and current.costs is None and "costs" not in current.sources
+    assert compare(prior, current)["efficiency_current"] is None
+
+
+def test_reported_total_costs_win_over_everything():
+    _, current = quarter_facts([("Revenues", 1000e6, 800e6), ("CostsAndExpenses", 690e6, 640e6),
+                                ("CostOfRevenue", 400e6, 350e6), ("OperatingExpenses", 300e6, 300e6),
+                                ("OperatingIncomeLoss", 300e6, 150e6)])
+    assert current.costs == 690e6 and current.sources["costs"]["derived"] is None
+
+
+# ---------- the previous quarter, kept apart from the same quarter ----------
+
+def test_previous_quarter_reported_in_its_own_10q(nvda_facts, latest):
+    periods = filing_periods(nvda_facts, latest)
+    previous = periods["previous_quarter"]
+    assert (previous["revenue"], previous["end"]) == (81_615_000_000, "2026-04-26")
+    assert previous["source"]["derived"] is None
+    assert previous["source"]["values"][0]["role_he"] == "הרבעון הקודם"
+    c = report_analysis(periods)["comparisons"]["quarter"]
+    assert c["previous_quarter"]["revenue_growth_pct"] == pytest.approx((96_221 / 81_615 - 1) * 100)
+    # a different comparison: it never changes the same-quarter numbers or the stage
+    assert c["revenue_growth_pct"] == pytest.approx((96_221 / 46_743 - 1) * 100)
+    assert (c["stage"]["from_stage"], c["stage"]["to_stage"]) == (6, 7)
+
+
+def test_previous_quarter_of_a_10k_is_the_third_quarter():
+    facts, filing = shifted_year_facts()
+    facts["facts"]["us-gaap"]["Revenues"]["units"]["USD"].append(
+        {"start": "2025-07-28", "end": "2025-10-26", "val": 400e6, "accn": "0000000001-25-000007",
+         "form": "10-Q", "filed": "2025-11-20"})
+    periods = filing_periods(facts, filing)
+    assert (periods["previous_quarter"]["revenue"], periods["previous_quarter"]["end"]) == (400e6, "2025-10-26")
+    quarter = report_analysis(periods)["comparisons"]["quarter"]
+    assert quarter["previous_quarter"]["revenue_growth_pct"] == pytest.approx(25)
+    assert "previous_quarter" not in report_analysis(periods)["comparisons"]["annual"]
+
+
+def test_previous_quarter_missing_is_none(clf):
+    # the fixture has no three-month third quarter
+    assert clf["previous_quarter"] is None
+    assert "previous_quarter" not in report_analysis(clf)["comparisons"]["quarter"]
+
+
+def test_previous_quarter_under_another_revenue_concept():
+    accn = "0000000001-26-000001"
+    facts = make_facts(accn, [
+        ("Revenues", "2026-04-01", "2026-06-30", 200e6), ("Revenues", "2025-04-01", "2025-06-30", 150e6),
+        ("SalesRevenueNet", "2026-01-01", "2026-03-31", 160e6, "0000000001-26-000000"),
+    ])
+    previous = filing_periods(facts, make_filing(accession=accn))["previous_quarter"]
+    assert previous["revenue"] == 160e6 and previous["source"]["values"][0]["concept"] == "SalesRevenueNet"
+
+
+def test_previous_quarter_ignores_periods_that_do_not_touch_the_current_one():
+    accn = "0000000001-26-000001"
+    facts = make_facts(accn, [
+        ("Revenues", "2026-04-01", "2026-06-30", 200e6), ("Revenues", "2025-04-01", "2025-06-30", 150e6),
+        ("Revenues", "2025-10-01", "2025-12-31", 170e6, "0000000001-26-000000"),  # two quarters back
+        ("Revenues", "2026-01-01", "2026-06-30", 380e6),  # year to date, overlaps
+    ])
+    assert filing_periods(facts, make_filing(accession=accn))["previous_quarter"] is None
